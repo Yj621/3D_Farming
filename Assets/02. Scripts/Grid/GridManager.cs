@@ -1,61 +1,65 @@
 using UnityEngine;
 
+public enum TileType { Empty, Mud, Crop };
+
 /// <summary>
-/// ³óÀåÀÇ ¹°¸®ÀûÀÎ °ø°£ µ¥ÀÌÅÍ¸¦ °ü¸®ÇÏ´Â Å¬·¡½º
-/// ¾î¶² Å¸ÀÏÀÌ ºñ¾îÀÖ°í, ¾î¶² Å¸ÀÏÀÌ Á¡À¯µÇ¾ú´ÂÁö¸¦ 2Â÷¿ø ¹è¿­·Î ÀúÀåÇÔ
+/// ë†ì¥ì˜ ë¬¼ë¦¬ì ì¸ ê³µê°„ ë°ì´í„°ë¥¼ ê´€ë¦¬í•˜ëŠ” í´ë˜ìŠ¤
+/// ì–´ë–¤ íƒ€ì¼ì´ ë¹„ì–´ìˆê³ , ì–´ë–¤ íƒ€ì¼ì´ ì ìœ ë˜ì—ˆëŠ”ì§€ë¥¼ 2ì°¨ì› ë°°ì—´ë¡œ ì €ì¥í•¨
 /// </summary>
 public class GridManager : MonoBehaviour
 {
-    [Header("³óÀå Å©±â ¼³Á¤")]
-    public int width = 10;  // °¡·Î Å¸ÀÏ °³¼ö
-    public int height = 10; // ¼¼·Î Å¸ÀÏ °³¼ö
+    [Header("ë†ì¥ í¬ê¸° ì„¤ì •")]
+    public int width = 10;  // ê°€ë¡œ íƒ€ì¼ ê°œìˆ˜
+    public int height = 10; // ì„¸ë¡œ íƒ€ì¼ ê°œìˆ˜
 
-    // Å¸ÀÏÀÇ Á¡À¯ »óÅÂ¸¦ ÀúÀåÇÏ´Â 2Â÷¿ø ¹è¿­ µ¥ÀÌÅÍ ±¸Á¶
-    // false : ºñ¾îÀÖÀ½ (¼³Ä¡ °¡´É)
-    // true  : ÀÌ¹Ì ¹«¾ğ°¡ ¼³Ä¡µÊ (¼³Ä¡ ºÒ°¡)
-    private bool[,] isOccupied;
+    private TileType[,] tileTypes; // bool ëŒ€ì‹  TileType ì‚¬ìš©
 
     /// <summary>
-    /// °ÔÀÓ ½ÃÀÛ ½Ã ¼³Á¤µÈ Å©±â¿¡ ¸ÂÃç ¹è¿­ ¸Ş¸ğ¸®¸¦ ÇÒ´ç
+    /// ê²Œì„ ì‹œì‘ ì‹œ ì„¤ì •ëœ í¬ê¸°ì— ë§ì¶° ë°°ì—´ ë©”ëª¨ë¦¬ë¥¼ í• ë‹¹
     /// </summary>
     private void Awake()
     {
-        // width x height Å©±âÀÇ ¹ÙµÏÆÇ ¸ğ¾ç µ¥ÀÌÅÍ¸¦ »ı¼º
-        isOccupied = new bool[width, height];
+        tileTypes = new TileType[width, height];
     }
 
     /// <summary>
-    /// Æ¯Á¤ ÁÂÇ¥(x, z)¿¡ ¿ÀºêÁ§Æ®¸¦ ¼³Ä¡ÇÒ ¼ö ÀÖ´ÂÁö °Ë»ç
+    /// íŠ¹ì • ì¢Œí‘œ(x, z)ì— ì˜¤ë¸Œì íŠ¸ë¥¼ ì„¤ì¹˜í•  ìˆ˜ ìˆëŠ”ì§€ ê²€ì‚¬
     /// </summary>
-    /// <param name="x">°Ë»çÇÒ ±×¸®µå X ÀÎµ¦½º</param>
-    /// <param name="z">°Ë»çÇÒ ±×¸®µå Z ÀÎµ¦½º</param>
-    /// <returns>¼³Ä¡ °¡´ÉÇÏ¸é true, ºÒ°¡´ÉÇÏ¸é false</returns>
+    /// <param name="x">ê²€ì‚¬í•  ê·¸ë¦¬ë“œ X ì¸ë±ìŠ¤</param>
+    /// <param name="z">ê²€ì‚¬í•  ê·¸ë¦¬ë“œ Z ì¸ë±ìŠ¤</param>
+    /// <returns>í•´ë‹¹ ì¹¸ì´ Emptyì¼ë•Œë§Œ true, ë¶ˆê°€ëŠ¥í•˜ë©´ false</returns>
     public bool CanPlace(int x, int z)
     {
-        // ÀÎµ¦½º°¡ ¸ÊÀÇ ¹üÀ§¸¦ ¹ş¾î³µ´ÂÁö ¸ÕÀú Ã¼Å© (¹è¿­ ¿À·ù ¹æÁö)
+        // ë§µ ë²”ìœ„ ì²´í¬
         if (x < 0 || x >= width || z < 0 || z >= height)
         {
-            return false; // ¸Ê ¹ÛÀº ¼³Ä¡ ºÒ°¡
+            return false;
         }
 
-        // ÇØ´ç Ä­ÀÇ Á¡À¯ »óÅÂ¸¦ ¹İÀü½ÃÄÑ ¹İÈ¯
-        // !isOccupied[x, z] ÀÇ ÀÇ¹Ì:
-        // Á¡À¯(true)¸é ¼³Ä¡ºÒ°¡(false) ¹İÈ¯, ºñ¾úÀ¸¸é(false) ¼³Ä¡°¡´É(true) ¹İÈ¯
-        return !isOccupied[x, z];
+        // í•´ë‹¹ ì¹¸ì´ Empty ìƒíƒœì¼ ë•Œë§Œ true ë°˜í™˜
+        // (isOccupied ë°°ì—´ì„ ì‚­ì œí–ˆìœ¼ë¯€ë¡œ tileTypesë§Œ í™•ì¸í•˜ë©´ ë©ë‹ˆë‹¤)
+        return tileTypes[x, z] == TileType.Empty;
     }
 
     /// <summary>
-    /// ¿ÀºêÁ§Æ® ¼³Ä¡°¡ È®Á¤µÇ¾úÀ» ¶§ ÇØ´ç Ä­ÀÇ »óÅÂ¸¦ 'Á¡À¯µÊ'À¸·Î º¯°æ
+    /// ì˜¤ë¸Œì íŠ¸ ì„¤ì¹˜ê°€ í™•ì •ë˜ì—ˆì„ ë•Œ ë°ì´í„° ê°±ì‹ 
     /// </summary>
-    /// <param name="x">Á¡À¯ÇÒ ±×¸®µå X ÀÎµ¦½º</param>
-    /// <param name="z">Á¡À¯ÇÒ ±×¸®µå Z ÀÎµ¦½º</param>
-    public void PlaceObject(int x, int z)
+    public void PlaceObject(int x, int z, TileType type)
     {
-        // ¸Ê ¹üÀ§ ¾ÈÀÏ ¶§¸¸ ½ÇÇà
+        // ë§µ ë²”ìœ„ ì•ˆì¼ ë•Œë§Œ ì‹¤í–‰
         if (x >= 0 && x < width && z >= 0 && z < height)
         {
-            isOccupied[x, z] = true;
-            Debug.Log($"µ¥ÀÌÅÍ ¾÷µ¥ÀÌÆ®: [{x}, {z}] ÁöÁ¡ÀÌ Á¡À¯µÇ¾ú½À´Ï´Ù.");
+            tileTypes[x, z] = type;
+            Debug.Log($"<color=yellow>ë°ì´í„° ê°±ì‹ :</color> [{x},{z}] ë²ˆì§€ íƒ€ì¼ì´ {type} ìƒíƒœê°€ ë˜ì—ˆìŠµë‹ˆë‹¤.");
         }
+    }
+
+    /// <summary>
+    /// í˜„ì¬ íƒ€ì¼ì˜ íƒ€ì…ì„ ë°˜í™˜í•˜ëŠ” í•¨ìˆ˜
+    /// </summary>
+    public TileType GetTileType(int x, int z)
+    {
+        if(x < 0 || x >= width || z < 0 || z>=height) return TileType.Empty;
+        return tileTypes[x, z];
     }
 }

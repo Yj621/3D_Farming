@@ -1,121 +1,233 @@
 using System;
+using UnityEditor.ShaderGraph;
 using UnityEngine;
 
 /// <summary>
-/// ¸¶¿ì½º ÀÔ·ÂÀ» ¹Ş¾Æ ±×¸®µå »ó¿¡ ¿ÀºêÁ§Æ®¸¦ ¹èÄ¡ÇÏ°í 
-/// ¹èÄ¡ °¡´É ¿©ºÎ¸¦ ½Ã°¢ÀûÀ¸·Î º¸¿©ÁÖ´Â Å¬·¡½º
+/// ë§ˆìš°ìŠ¤ ì…ë ¥ì„ ë°›ì•„ ê·¸ë¦¬ë“œ ìƒì— ì˜¤ë¸Œì íŠ¸ë¥¼ ë°°ì¹˜í•˜ê³  
+/// ë°°ì¹˜ ê°€ëŠ¥ ì—¬ë¶€ë¥¼ ì‹œê°ì ìœ¼ë¡œ ë³´ì—¬ì£¼ëŠ” í´ë˜ìŠ¤
 /// </summary>
 public class GridSystem : MonoBehaviour
 {
-    [Header("¼³Á¤")]
-    public float cellSize = 10f;       // ±×¸®µå ÇÑ Ä­ÀÇ Å©±â (±âº» Plane 10x10¿¡ ¸ÂÃã)
-    public LayerMask groundLayer;      // ·¹ÀÌÄ³½ºÆ®°¡ °¨ÁöÇÒ ¹Ù´Ú ·¹ÀÌ¾î
+    [Header("ì„¤ì •")]
+    [SerializeField] private float cellSize = 10f;       // ê·¸ë¦¬ë“œ í•œ ì¹¸ì˜ í¬ê¸° (ê¸°ë³¸ Plane 10x10ì— ë§ì¶¤)
+    [SerializeField] private LayerMask groundLayer;      // ë ˆì´ìºìŠ¤íŠ¸ê°€ ê°ì§€í•  ë°”ë‹¥ ë ˆì´ì–´
 
-    [Header("ÇÁ¸®ÆÕ")]
-    public GameObject previewPrefab;   // ¼³Ä¡ Àü º¸¿©ÁÙ Åõ¸íÇÑ ¹Ì¸®º¸±â¿ë ÇÁ¸®ÆÕ
-    public GameObject realPrefab;      // ½ÇÁ¦·Î ¼³Ä¡µÉ ¿Ï¼ºµÈ ¿ÀºêÁ§Æ® ÇÁ¸®ÆÕ
+    [Header("ë°­ ì„¤ì •")]
+    [SerializeField] private GameObject mudPreviewPrefab;   // ì„¤ì¹˜ ì „ ë³´ì—¬ì¤„ íˆ¬ëª…í•œ ë¯¸ë¦¬ë³´ê¸°ìš© í”„ë¦¬íŒ¹
+    [SerializeField] private GameObject mudPrefab;      // ì‹¤ì œë¡œ ì„¤ì¹˜ë  ì™„ì„±ëœ ì˜¤ë¸Œì íŠ¸ í”„ë¦¬íŒ¹
 
-    private GridManager gridManager;   // ¼³Ä¡ µ¥ÀÌÅÍ¸¦ °ü¸®ÇÏ´Â GridManager ÂüÁ¶
-    private GameObject previewInstance; // ¾À¿¡ »ı¼ºµÇ¾î µû¶ó´Ù´Ò ¹Ì¸®º¸±â ÀÎ½ºÅÏ½º
+    [Header("ì‘ë¬¼ ì„¤ì •")]
+    [SerializeField] private GameObject previewCropPrefab;
+    [SerializeField] private GameObject cropPrefab;    // Crop ìŠ¤í¬ë¦½íŠ¸ê°€ ë¶™ì–´ìˆëŠ” ë¹ˆ ì˜¤ë¸Œì íŠ¸ í”„ë¦¬íŒ¹
+
+    [Header("ì„ íƒëœ ìƒíƒœ")]
+    [SerializeField] private bool isMudSelect = false; // ê¸°ë³¸ì ìœ¼ë¡œ ì•„ë¬´ê²ƒë„ ì„ íƒX
+    [SerializeField] private CropData currentSelectedCrop; // ì„ íƒëœ ì”¨ì•— ë°ì´í„°
+
+    private GridManager gridManager;   // ì„¤ì¹˜ ë°ì´í„°ë¥¼ ê´€ë¦¬í•˜ëŠ” GridManager ì°¸ì¡°
+    private GameObject previewInstance; // ì”¬ì— ìƒì„±ë˜ì–´ ë”°ë¼ë‹¤ë‹ ë¯¸ë¦¬ë³´ê¸° ì¸ìŠ¤í„´ìŠ¤
 
     void Start()
     {
-        // ¹Ì¸®º¸±â ÀÎ½ºÅÏ½º¸¦ »ı¼ºÇÏ°í ÃÊ±â ¼³Á¤ ÁøÇà
-        if (previewPrefab != null)
+       /* // ë¯¸ë¦¬ë³´ê¸° ì¸ìŠ¤í„´ìŠ¤ë¥¼ ìƒì„±í•˜ê³  ì´ˆê¸° ì„¤ì • ì§„í–‰
+        if (mudPreviewPrefab != null)
         {
-            previewInstance = Instantiate(previewPrefab);
-            previewPrefab.SetActive(false);
+            previewInstance = Instantiate(mudPreviewPrefab);
+            mudPreviewPrefab.SetActive(false);
 
-            // TryGetComponent: GameObject¿¡ Á¸ÀçÇÏ´Â °æ¿ì ÁöÁ¤µÈ À¯ÇüÀÇ ÄÄÆ÷³ÍÆ®¸¦ °Ë»öÇÏ·Á°í ½ÃµµÇÏ°í,
-            // ¹ß°ßµÇ¸é true, ¹ß°ßµÇÁö ¾ÊÀ¸¸é false¸¦ ¹İÈ¯ÇÑ´Ù.
+            // TryGetComponent: GameObjectì— ì¡´ì¬í•˜ëŠ” ê²½ìš° ì§€ì •ëœ ìœ í˜•ì˜ ì»´í¬ë„ŒíŠ¸ë¥¼ ê²€ìƒ‰í•˜ë ¤ê³  ì‹œë„í•˜ê³ ,
+            // ë°œê²¬ë˜ë©´ true, ë°œê²¬ë˜ì§€ ì•Šìœ¼ë©´ falseë¥¼ ë°˜í™˜í•œë‹¤.
             //public bool TryGetComponent<T>(out T component) where T : Component;
-            /* T: °¡Á®¿À·Á´Â ÄÄÆ÷³ÍÆ®ÀÇ Å¸ÀÔ
-            component: ÄÄÆ÷³ÍÆ®¸¦ °¡Á®¿Ã ¶§ »ç¿ëµÇ´Â out ¸Å°³º¯¼ö */
+            *//* T: ê°€ì ¸ì˜¤ë ¤ëŠ” ì»´í¬ë„ŒíŠ¸ì˜ íƒ€ì…
+            component: ì»´í¬ë„ŒíŠ¸ë¥¼ ê°€ì ¸ì˜¬ ë•Œ ì‚¬ìš©ë˜ëŠ” out ë§¤ê°œë³€ìˆ˜ *//*
 
-            // ¹Ì¸®º¸±â ¿ÀºêÁ§Æ®°¡ ¸¶¿ì½º ·¹ÀÌÄ³½ºÆ®¸¦ ¹æÇØÇÏÁö ¾Êµµ·Ï Äİ¶óÀÌ´õ ºñÈ°¼ºÈ­
+            // ë¯¸ë¦¬ë³´ê¸° ì˜¤ë¸Œì íŠ¸ê°€ ë§ˆìš°ìŠ¤ ë ˆì´ìºìŠ¤íŠ¸ë¥¼ ë°©í•´í•˜ì§€ ì•Šë„ë¡ ì½œë¼ì´ë” ë¹„í™œì„±í™”
             if (previewInstance.TryGetComponent<Collider>(out Collider col)) col.enabled = false;
-        }
-        // ¾À¿¡ Á¸ÀçÇÏ´Â GridManager¸¦ Ã£¾Æ ÂüÁ¶ ¿¬°á
+        }*/
+        // ì”¬ì— ì¡´ì¬í•˜ëŠ” GridManagerë¥¼ ì°¾ì•„ ì°¸ì¡° ì—°ê²°
         if (gridManager == null) gridManager = FindAnyObjectByType<GridManager>();
     }
     void Update()
     {
-        // ¸¶¿ì½º À§Ä¡·ÎºÎÅÍ È­¸é ¾ÈÂÊÀ¸·Î ·¹ÀÌ(±¤¼±)¸¦ ½ğ´Ù.
+        // ë§ˆìš°ìŠ¤ ìœ„ì¹˜ë¡œë¶€í„° í™”ë©´ ì•ˆìª½ìœ¼ë¡œ ë ˆì´(ê´‘ì„ )ë¥¼ ìœë‹¤.
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
         RaycastHit hit;
 
-        //Ray°¡ ¾î¶² Collider¿¡ ¸ÂÀ¸¸é true¸¦ ¹İÈ¯ÇÏ°í, ±× Ãæµ¹ Á¤º¸´Â hit¿¡ ´ã±ä´Ù.
+        //Rayê°€ ì–´ë–¤ Colliderì— ë§ìœ¼ë©´ trueë¥¼ ë°˜í™˜í•˜ê³ , ê·¸ ì¶©ëŒ ì •ë³´ëŠ” hitì— ë‹´ê¸´ë‹¤.
 
-        // ÁöÁ¤µÈ groundLayer(¹Ù´Ú)¿¡ ·¹ÀÌ°¡ ¸Â¾ÒÀ» ¶§¸¸ ·ÎÁ÷ ½ÇÇà
+        // ì§€ì •ëœ groundLayer(ë°”ë‹¥)ì— ë ˆì´ê°€ ë§ì•˜ì„ ë•Œë§Œ ë¡œì§ ì‹¤í–‰
         if (Physics.Raycast(ray, out hit, Mathf.Infinity, groundLayer))
         {
-            // [ÁÂÇ¥ °è»ê] ¸ÂÀº ÁöÁ¡ÀÇ ¿ùµå ÁÂÇ¥¸¦ ±×¸®µå ÀÎµ¦½º(0, 1, 2...)·Î º¯È¯
+            // [ì¢Œí‘œ ê³„ì‚°] ë§ì€ ì§€ì ì˜ ì›”ë“œ ì¢Œí‘œë¥¼ ê·¸ë¦¬ë“œ ì¸ë±ìŠ¤(0, 1, 2...)ë¡œ ë³€í™˜
             int xIdx = Mathf.FloorToInt(hit.point.x / cellSize);
             int zIdx = Mathf.FloorToInt(hit.point.z / cellSize);
 
-            // [½º³À ÁÂÇ¥] ¿ÀºêÁ§Æ®°¡ ±×¸®µå Á¤Áß¾Ó¿¡ ¿Àµµ·Ï ÁÂÇ¥ º¸Á¤ (+cellSize/2)
+            // [ìŠ¤ëƒ… ì¢Œí‘œ] ë°”ë‹¥ì´ ê·¸ë¦¬ë“œ ì •ì¤‘ì•™ì— ì˜¤ë„ë¡ ì¢Œí‘œ ë³´ì • (+cellSize/2)
             Vector3 snapPos = new Vector3(xIdx * cellSize + (cellSize / 2), 0, zIdx * cellSize + (cellSize / 2));
+            
+            // ëª¨ë“œì— ë”°ë¥¸ ë†’ì´ ê²°ì •
+            // ë°­ ì„¤ì¹˜ ëª¨ë“œë©´ 0, ì‘ë¬¼ ì„¤ì¹˜ ëª¨ë“œë©´ 0.16f
+            float targetY = isMudSelect ? 0f : 0.16f;
 
-            // ¹Ì¸®º¸±â À§Ä¡ ¾÷µ¥ÀÌÆ® ¹× »ö»ó º¯°æ ÇÔ¼ö È£Ãâ
-            HandlePreview(snapPos, xIdx, zIdx);
+            // í”„ë¦¬ë·° ì²˜ë¦¬ (targetY ë°˜ì˜)
+            HandlePreview(snapPos, targetY, xIdx, zIdx);
 
-            // ¸¶¿ì½º ¿ŞÂÊ Å¬¸¯ ½Ã ÇØ´ç À§Ä¡¿¡ ½ÇÁ¦ ¼³Ä¡ ½Ãµµ
+            // ë§ˆìš°ìŠ¤ ì™¼ìª½ í´ë¦­ ì‹œ í•´ë‹¹ ìœ„ì¹˜ì— ì‹¤ì œ ì„¤ì¹˜ ì‹œë„
             if (Input.GetMouseButtonDown(0))
             {
-                PlaceAt(snapPos, xIdx, zIdx);
+                PlaceAt(snapPos, xIdx, targetY, zIdx);
             }
         }
         else
         {
-            // ¹Ù´ÚÀ» ¹ş¾î³ª¸é ¹Ì¸®º¸±â¸¦ ¼û±è
+            // ë°”ë‹¥ì„ ë²—ì–´ë‚˜ë©´ ë¯¸ë¦¬ë³´ê¸°ë¥¼ ìˆ¨ê¹€
             if (previewInstance != null)
             {
                 previewInstance.SetActive(false);
             }
         }
+    }
 
-        /// <summary>
-        /// ¹Ì¸®º¸±â ¿ÀºêÁ§Æ®¸¦ ¸¶¿ì½º À§Ä¡·Î ÀÌµ¿½ÃÅ°°í, ¼³Ä¡ °¡´É ¿©ºÎ¿¡ µû¶ó »ö»óÀ» º¯°æÇÏ´Â ¸Ş¼­µå
-        /// </summary>
-        void HandlePreview(Vector3 pos, int x, int z)
+    /// <summary>
+    /// ì„ íƒëœ ëª¨ë“œì— ë§ì¶° ë¯¸ë¦¬ë³´ê¸°(Preview) ëª¨ë¸ì„ êµì²´í•©ë‹ˆë‹¤.
+    /// </summary>
+    void UpdatePreviewInstance(GameObject newPrefab)
+    {
+        // ê¸°ì¡´ ë¯¸ë¦¬ë³´ê¸°ê°€ ìˆë‹¤ë©´ ì‚­ì œ
+        if(previewInstance != null)
         {
-            if (previewInstance == null)
-            {
-                return;
-            }
-            previewInstance.SetActive(true);
-            previewInstance.transform.position = pos;
+            Destroy(previewInstance); 
+        }
+        //OnClickSelectCrop ìƒˆë¡œìš´ í”„ë¦¬íŒ¹ìœ¼ë¡œ ìƒì„±
+        if (newPrefab != null)
+        {
+            // ì›ë³¸ í”„ë¦¬íŒ¹ì„ ë³µì œí•˜ì—¬ previewInstance ë³€ìˆ˜ì— í• ë‹¹
+            previewInstance = Instantiate(newPrefab);
+            previewInstance.SetActive(false);
 
-            // GridManager¿¡°Ô ÇöÀç Ä­ÀÌ ºñ¾îÀÖ´ÂÁö È®ÀÎ ¿äÃ»
-            bool canPlace = gridManager.CanPlace(x, z);
+            // ë ˆì´ìºìŠ¤íŠ¸ ë°©í•´ ë°©ì§€ (ì½œë¼ì´ë” ë„ê¸°)
+            if (previewInstance.TryGetComponent<Collider>(out Collider col))
+                col.enabled = false;
+        }
+    }
 
-            // ½Ã°¢Àû ÇÇµå¹é: °¡´ÉÇÏ¸é ÃÊ·Ï»ö(Green), ºÒ°¡´ÉÇÏ¸é »¡°£»ö(Red) ¹İÅõ¸í Ã³¸®
-            MeshRenderer mr = previewInstance.GetComponentInChildren<MeshRenderer>();
-            if(mr != null)
-            {
-                mr.material.color = canPlace ? new Color(0, 1, 0, 0.5f) : new Color(1, 0, 0, 0.5f);
-            }
+    /// <summary>
+    /// ë°­ ì„ íƒ ë²„íŠ¼
+    /// </summary>
+    public void OnClickSelectMud()
+    {
+        isMudSelect = true;
+        currentSelectedCrop = null;
+        // ë¯¸ë¦¬ë³´ê¸°ë¥¼ ë°­ìš©ìœ¼ë¡œ êµì²´
+        UpdatePreviewInstance(mudPreviewPrefab);
+        Debug.Log("ë°­ ì„ íƒ ëª¨ë“œ");
+    }
+
+    public void OnClickSelectCrop(CropData cropdata)
+    {
+        isMudSelect = false;
+        currentSelectedCrop = cropdata;
+        // ë¯¸ë¦¬ë³´ê¸°ë¥¼ ì‘ë¬¼ìš©ìœ¼ë¡œ êµì²´
+        UpdatePreviewInstance(previewCropPrefab);
+        Debug.Log($"{cropdata.cropName} ì”¨ì•— ì„ íƒ");
+    }
+
+    /// <summary>
+    /// ë¯¸ë¦¬ë³´ê¸° ì˜¤ë¸Œì íŠ¸ë¥¼ ë§ˆìš°ìŠ¤ ìœ„ì¹˜ë¡œ ì´ë™ì‹œí‚¤ê³ , ì„¤ì¹˜ ê°€ëŠ¥ ì—¬ë¶€ì— ë”°ë¼ ìƒ‰ìƒì„ ë³€ê²½í•˜ëŠ” ë©”ì„œë“œ
+    /// </summary>
+    void HandlePreview(Vector3 pos, float y, int x, int z)
+    {
+        if (previewInstance == null)
+        {
+            return;
         }
 
-        /// <summary>
-        /// ÃÖÁ¾ÀûÀ¸·Î GridManagerÀÇ ½ÂÀÎÀ» ¹Ş¾Æ ½ÇÁ¦ ¿ÀºêÁ§Æ®¸¦ »ı¼ºÇÏ°í Á¡À¯ µ¥ÀÌÅÍ¸¦ ±â·ÏÇÏ´Â ¸Ş¼­µå
-        /// </summary>
-        void PlaceAt(Vector3 pos, int x, int z)
+        // ì•„ë¬´ ëª¨ë“œë„ ì„ íƒë˜ì§€ ì•Šì•˜ë‹¤ë©´ í”„ë¦¬ë·°ë¥¼ ë„ê³  ë¦¬í„´
+        if (!isMudSelect && currentSelectedCrop == null)
         {
-            if (gridManager.CanPlace(x, z))
+            previewInstance.SetActive(false);
+            return;
+        }
+        pos.y = y;
+        previewInstance.SetActive(true);
+        previewInstance.transform.position = pos;
+
+        if (gridManager == null) return;
+
+        bool canPlaceVisually = false;
+        if (isMudSelect)
+        {
+            //ë°­ ì„¤ì¹˜ ëª¨ë“œ : í•´ë‹¹ ì¹¸ì´ Emptyì—¬ì•¼ ì´ˆë¡ìƒ‰
+            canPlaceVisually = gridManager.CanPlace(x, z);
+        }
+        else if (currentSelectedCrop != null)
+        {
+            //ì”¨ì•— ì‹¬ê¸° ëª¨ë“œ : í•´ë‹¹ ì¹¸ì´ Mud ì—¬ì•¼ ì´ˆë¡ìƒ‰(ì´ë¯¸ Cropì¸ ê³³ì€ falseê°€ ë¨)
+            canPlaceVisually = (gridManager.GetTileType(x, z) == TileType.Mud);
+        }
+
+        // ì‹œê°ì  í”¼ë“œë°±: ê°€ëŠ¥í•˜ë©´ ì´ˆë¡ìƒ‰(Green), ë¶ˆê°€ëŠ¥í•˜ë©´ ë¹¨ê°„ìƒ‰(Red) ë°˜íˆ¬ëª… ì²˜ë¦¬
+        MeshRenderer mr = previewInstance.GetComponentInChildren<MeshRenderer>();
+        if (mr != null)
+        {
+            mr.material.color = canPlaceVisually ? new Color(0, 1, 0, 0.5f) : new Color(1, 0, 0, 0.5f);
+        }
+    }
+
+    /// <summary>
+    /// ìµœì¢…ì ìœ¼ë¡œ GridManagerì˜ ìŠ¹ì¸ì„ ë°›ì•„ ì‹¤ì œ ì˜¤ë¸Œì íŠ¸ë¥¼ ìƒì„±í•˜ê³  ì ìœ  ë°ì´í„°ë¥¼ ê¸°ë¡í•˜ëŠ” ë©”ì„œë“œ
+    /// </summary>
+    void PlaceAt(Vector3 pos, int x, float y, int z)
+    {
+        // ë°­ ì„¤ì¹˜ ëª¨ë“œì¼ ë•Œ
+        if (isMudSelect && gridManager.CanPlace(x, z))
+        {
+            pos.y = 0f; // ë°­ì€ ë¬´ì¡°ê±´ ë°”ë‹¥ì— ì„¤ì¹˜
+            Instantiate(mudPrefab, pos, Quaternion.identity);
+            gridManager.PlaceObject(x, z, TileType.Mud);
+            Debug.Log($"[{x}, {z}] ìœ„ì¹˜ì— ë°­ ì„¤ì¹˜ ì„±ê³µ");
+        }
+        // ì‘ë¬¼ ì„¤ì¹˜ ëª¨ë“œ (í˜„ì¬ ì¹¸ì´ ì •í™•íˆ Mud ìƒíƒœì—¬ì•¼ë§Œ í•¨)
+        // ë§Œì•½ ì´ë¯¸ ì‘ë¬¼ì„ ì‹¬ì–´ì„œ TileType.Cropìœ¼ë¡œ ë³€í–ˆë‹¤ë©´, GetTileTypeì€ Mudê°€ ì•„ë‹ˆê²Œ ë¨
+        else if (!isMudSelect && currentSelectedCrop != null)
+        {
+            TileType currentTile = gridManager.GetTileType(x, z);
+            if (gridManager.GetTileType(x, z) == TileType.Mud)
             {
-                // ½ÇÁ¦ ¿ÀºêÁ§Æ® »ı¼º
-                Instantiate(realPrefab, pos, Quaternion.identity);
-
-                // GridManager¿¡ ÇØ´ç ÁÂÇ¥°¡ Á¡À¯µÇ¾úÀ½À» ±â·Ï (Áßº¹ ¼³Ä¡ ¹æÁö)
-                gridManager.PlaceObject(x, z);
-
-                Debug.Log($"[{x}, {z}] À§Ä¡¿¡ ¼³Ä¡ ¼º°ø");
+                pos.y = 0.16f;
+                PlantCrop(pos, x, z);
+            }
+            else if (currentTile == TileType.Crop)
+            {
+                Debug.Log("ì—¬ê¸°ëŠ” ì´ë¯¸ ì‘ë¬¼ì´ ìë¼ê³  ìˆìŠµë‹ˆë‹¤!"); // ì´ ë¡œê·¸ê°€ ì°íˆëŠ”ì§€ í™•ì¸í•˜ì„¸ìš”.
             }
             else
             {
-                Debug.Log("¼³Ä¡ ºÒ°¡ Áö¿ª");
+                Debug.Log("ë°­ì´ ì•„ë‹Œ ê³³ì—ëŠ” ì‹¬ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
             }
         }
     }
+
+    void PlantCrop(Vector3 pos, int x, int z)
+    {
+        // ì‘ë¬¼ í”„ë¦¬íŒ¹ ìƒì„±
+        GameObject newCrop = Instantiate(cropPrefab, pos, Quaternion.identity);
+
+        gridManager.PlaceObject(x, z, TileType.Crop);
+
+        // ìƒì„±ëœ ì‘ë¬¼ì— Crop ìŠ¤í¬ë¦½íŠ¸ë¥¼ ê°€ì ¸ì™€ ë°ì´í„° ì „ë‹¬
+        if (newCrop.TryGetComponent<Crop>(out Crop crop))
+        {
+            crop.Initialize(currentSelectedCrop);
+            Debug.Log($"{currentSelectedCrop.cropName}ì„ ì‹¬ì—ˆìŠµë‹ˆë‹¤/");
+        }
+
+        else
+        {
+            Debug.LogError($"cropPrefab ë£¨íŠ¸ì— Crop ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤! í”„ë¦¬íŒ¹ì„ í™•ì¸í•˜ì„¸ìš”: {newCrop.name}");
+            gridManager.PlaceObject(x, z, TileType.Mud);
+            Destroy(newCrop);
+        }
+    }
 }
+
