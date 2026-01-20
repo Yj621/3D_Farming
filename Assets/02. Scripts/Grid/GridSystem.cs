@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEditor.ShaderGraph;
 using UnityEngine;
 
@@ -24,68 +25,182 @@ public class GridSystem : MonoBehaviour
     [SerializeField] private bool isMudSelect = false; // 기본적으로 아무것도 선택X
     [SerializeField] private CropData currentSelectedCrop; // 선택된 씨앗 데이터
 
+    [Header("수확 이펙트 설정")]
+    [SerializeField] private GameObject floatingTextPrefab; // 위에서 만든 프리팹 연결
+    [SerializeField] private Canvas worldCanvas;
+
     private GridManager gridManager;   // 설치 데이터를 관리하는 GridManager 참조
     private GameObject previewInstance; // 씬에 생성되어 따라다닐 미리보기 인스턴스
 
+    [Header("모바일 조작 설정")]
+    [SerializeField] private float clickThreshold = 20f; // 이 거리보다 적게 움직여야 '클릭'으로 인정
+    private Vector2 touchStartPos;
+
     void Start()
     {
-       /* // 미리보기 인스턴스를 생성하고 초기 설정 진행
-        if (mudPreviewPrefab != null)
-        {
-            previewInstance = Instantiate(mudPreviewPrefab);
-            mudPreviewPrefab.SetActive(false);
-
-            // TryGetComponent: GameObject에 존재하는 경우 지정된 유형의 컴포넌트를 검색하려고 시도하고,
-            // 발견되면 true, 발견되지 않으면 false를 반환한다.
-            //public bool TryGetComponent<T>(out T component) where T : Component;
-            *//* T: 가져오려는 컴포넌트의 타입
-            component: 컴포넌트를 가져올 때 사용되는 out 매개변수 *//*
-
-            // 미리보기 오브젝트가 마우스 레이캐스트를 방해하지 않도록 콜라이더 비활성화
-            if (previewInstance.TryGetComponent<Collider>(out Collider col)) col.enabled = false;
-        }*/
         // 씬에 존재하는 GridManager를 찾아 참조 연결
         if (gridManager == null) gridManager = FindAnyObjectByType<GridManager>();
     }
+
+
     void Update()
     {
-        // 마우스 위치로부터 화면 안쪽으로 레이(광선)를 쏜다.
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        // 1. 입력 처리 분기 (모바일 터치 vs 에디터 마우스)
+        if (Input.touchCount > 0)
+        {
+            HandleMobileInput();
+        }
+        else if (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0))
+        {
+            HandleEditorInput();
+        }
+        else
+        {
+            // 입력이 없으면 미리보기 끄기
+            if (previewInstance != null) previewInstance.SetActive(false);
+        }
+    }
+
+    // --- 모바일 터치 로직 ---
+    void HandleMobileInput()
+    {
+        Touch touch = Input.GetTouch(0);
+        Vector2 touchPos = touch.position;
+
+        if (touch.phase == TouchPhase.Began)
+        {
+            touchStartPos = touchPos;
+        }
+
+        // 손가락이 닿아 있는 동안은 미리보기만 보여줌
+        ProcessRaycast(touchPos, false);
+
+        // 손가락을 뗐을 때 '드래그'가 아닌 '클릭'인 경우만 실행
+        if (touch.phase == TouchPhase.Ended)
+        {
+            float distance = Vector2.Distance(touchStartPos, touchPos);
+            if (distance < clickThreshold)
+            {
+                ProcessRaycast(touchPos, true); // 실제 설치/수확 실행
+            }
+
+            if (previewInstance != null) previewInstance.SetActive(false);
+        }
+    }
+
+    // --- 에디터 마우스 로직 ---
+    void HandleEditorInput()
+    {
+        Vector2 mousePos = Input.mousePosition;
+
+        // 마우스를 누르고 있는 동안은 미리보기
+        ProcessRaycast(mousePos, false);
+
+        // 마우스를 떼는 순간에만 설치/수확 실행
+        if (Input.GetMouseButtonUp(0))
+        {
+            ProcessRaycast(mousePos, true);
+            if (previewInstance != null) previewInstance.SetActive(false);
+        }
+    }
+
+    // 핵심 레이캐스트 로직 (통합) 
+    void ProcessRaycast(Vector2 screenPos, bool isFinalAction)
+    {
+        Ray ray = Camera.main.ScreenPointToRay(screenPos);
         RaycastHit hit;
 
-        //Ray가 어떤 Collider에 맞으면 true를 반환하고, 그 충돌 정보는 hit에 담긴다.
-
-        // 지정된 groundLayer(바닥)에 레이가 맞았을 때만 로직 실행
         if (Physics.Raycast(ray, out hit, Mathf.Infinity, groundLayer))
         {
-            // [좌표 계산] 맞은 지점의 월드 좌표를 그리드 인덱스(0, 1, 2...)로 변환
             int xIdx = Mathf.FloorToInt(hit.point.x / cellSize);
             int zIdx = Mathf.FloorToInt(hit.point.z / cellSize);
 
-            // [스냅 좌표] 바닥이 그리드 정중앙에 오도록 좌표 보정 (+cellSize/2)
             Vector3 snapPos = new Vector3(xIdx * cellSize + (cellSize / 2), 0, zIdx * cellSize + (cellSize / 2));
-            
-            // 모드에 따른 높이 결정
-            // 밭 설치 모드면 0, 작물 설치 모드면 0.16f
             float targetY = isMudSelect ? 0f : 0.16f;
 
-            // 프리뷰 처리 (targetY 반영)
+            // 시각적 미리보기 업데이트
             HandlePreview(snapPos, targetY, xIdx, zIdx);
 
-            // 마우스 왼쪽 클릭 시 해당 위치에 실제 설치 시도
-            if (Input.GetMouseButtonDown(0))
+            // 실제 동작(설치/수확) 수행
+            if (isFinalAction)
             {
-                PlaceAt(snapPos, xIdx, targetY, zIdx);
+                if (isMudSelect || currentSelectedCrop != null)
+                {
+                    PlaceAt(snapPos, xIdx, targetY, zIdx);
+                }
+                else
+                {
+                    TryHarvest(hit.point, xIdx, zIdx);
+                }
             }
         }
         else
         {
-            // 바닥을 벗어나면 미리보기를 숨김
-            if (previewInstance != null)
+            if (previewInstance != null) previewInstance.SetActive(false);
+        }
+    }
+
+    void TryHarvest(Vector3 hitPoint, int x, int z)
+    {
+        // 현재 칸이 작물 상태인지 확인
+        if (gridManager.GetTileType(x, z) == TileType.Crop)
+        {
+            // 해당 그리드 칸의 중심 좌표 계산
+            Vector3 targetPos = new Vector3(x * cellSize + (cellSize / 2), 0, z * cellSize + (cellSize / 2));
+
+            // 주변의 콜라이더를 체크하여 Crop 오브젝트 탐색
+            Collider[] colliders = Physics.OverlapSphere(targetPos, cellSize * 0.4f);
+
+            foreach (var col in colliders)
             {
-                previewInstance.SetActive(false);
+                if (col.TryGetComponent<Crop>(out Crop crop))
+                {
+                    // 다 자랐는지 확인
+                    if (crop.IsFullGrown)
+                    {
+                        // 판매 금액 결정
+                        int reward = crop.data.sellingPrice;
+
+                        // 골드 지급
+                        InventoryManager.Instance.AddGoldGFromHarvest(reward);
+
+                        //텍스트 띄우기
+                        ShowFloatingText(targetPos, reward);
+
+                        crop.Harvest();
+                        gridManager.PlaceObject(x, z, TileType.Mud);
+
+                        if (UIManager.Instance != null)
+                        {
+                            UIManager.Instance.AddHarvestCount();
+                        }
+
+                        Debug.Log($"[{x}, {z}] 수확 성공! 다시 심을 수 있습니다.");
+                    }
+                    else
+                    {
+                        Debug.Log("아직 다 자라지 않았습니다.");
+                    }
+                    break;
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// 모든 선택을 해제하고 수확 모드로 전환하는 버튼용 함수(아무것도 안 들고 있음)
+    /// </summary>
+    public void OnClickClearSelection()
+    {
+        isMudSelect = false;
+        currentSelectedCrop = null;
+
+        if (previewInstance != null)
+        {
+            previewInstance.SetActive(false);
+        }
+        Debug.Log("모든 선택 해제 - 수확 모드 활성화");
+
     }
 
     /// <summary>
@@ -94,9 +209,9 @@ public class GridSystem : MonoBehaviour
     void UpdatePreviewInstance(GameObject newPrefab)
     {
         // 기존 미리보기가 있다면 삭제
-        if(previewInstance != null)
+        if (previewInstance != null)
         {
-            Destroy(previewInstance); 
+            Destroy(previewInstance);
         }
         //OnClickSelectCrop 새로운 프리팹으로 생성
         if (newPrefab != null)
@@ -207,6 +322,31 @@ public class GridSystem : MonoBehaviour
             }
         }
     }
+    /// <summary>
+    /// 플로팅 텍스트(골드 획득 텍스트) 띄우기
+    /// </summary>
+    /// <param name="pos"></param>
+    /// <param name="amount"></param>
+    void ShowFloatingText(Vector3 pos, int amount)
+    {
+        // 텍스트가 작물보다 약간 위에서 생성되도록 y값 조절
+        pos.y += 1f;
+
+        GameObject textObj = Instantiate(floatingTextPrefab, pos, Quaternion.identity, worldCanvas.transform);
+
+        //텍스트 내용 변경
+        if (textObj.TryGetComponent<TextMeshProUGUI>(out var tmp))
+        {
+            tmp.text = $"{amount}골드";
+        }
+    }
+
+    /// <summary>
+    /// 식물 심기
+    /// </summary>
+    /// <param name="pos"></param>
+    /// <param name="x"></param>
+    /// <param name="z"></param>
 
     void PlantCrop(Vector3 pos, int x, int z)
     {

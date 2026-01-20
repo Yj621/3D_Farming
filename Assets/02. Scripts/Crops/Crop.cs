@@ -2,10 +2,12 @@ using UnityEngine;
 
 public class Crop : MonoBehaviour
 {
-    private CropData data;
+    public CropData data;
     private int currentState = 0;
     private GameObject currentModel;
 
+    // 수확이 가능한지 
+    public bool IsFullGrown => currentState >= data.growthStagePrefabs.Length - 1;
     public void Initialize(CropData cropData)
     {
         data = cropData;
@@ -30,6 +32,15 @@ public class Crop : MonoBehaviour
 
 
         Debug.Log($"{data.cropName} 성장 시작. 주기: {interval}초");
+    }
+
+    /// <summary>
+    /// 수확 함수
+    /// </summary>
+    public void Harvest()
+    {
+        Debug.Log($"{data.cropName} 수확 완료!");
+        Destroy(gameObject);
     }
 
     void Grow()

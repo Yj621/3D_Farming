@@ -19,3 +19,4 @@ MonoBehaviour:
   - {fileID: 5054277889059016994, guid: 973ebfddefab1324c941b6c80675d3d8, type: 3}
   - {fileID: 9218926353566358502, guid: e2000999f10c63c48bb47dd40b31efcd, type: 3}
   timeBetweenStages: 5
+  sellingPrice: 50
