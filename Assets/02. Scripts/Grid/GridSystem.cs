@@ -1,6 +1,5 @@
 using System;
 using TMPro;
-using UnityEditor.ShaderGraph;
 using UnityEngine;
 
 /// <summary>
@@ -31,9 +30,8 @@ public class GridSystem : MonoBehaviour
 
     private GridManager gridManager;   // 설치 데이터를 관리하는 GridManager 참조
     private GameObject previewInstance; // 씬에 생성되어 따라다닐 미리보기 인스턴스
-
     [Header("모바일 조작 설정")]
-    [SerializeField] private float clickThreshold = 20f; // 이 거리보다 적게 움직여야 '클릭'으로 인정
+    [SerializeField] private float touchThreshold = 20f; // 드래그와 클릭을 구분하는 임계값
     private Vector2 touchStartPos;
 
     void Start()
@@ -50,18 +48,18 @@ public class GridSystem : MonoBehaviour
         {
             HandleMobileInput();
         }
-        else if (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0))
+        else if (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))
         {
             HandleEditorInput();
         }
         else
         {
-            // 입력이 없으면 미리보기 끄기
+            // 입력이 전혀 없으면 프리뷰 끄기
             if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
 
-    // --- 모바일 터치 로직 ---
+    // --- 모바일 터치 처리 ---
     void HandleMobileInput()
     {
         Touch touch = Input.GetTouch(0);
@@ -72,37 +70,38 @@ public class GridSystem : MonoBehaviour
             touchStartPos = touchPos;
         }
 
-        // 손가락이 닿아 있는 동안은 미리보기만 보여줌
+        // 손가락이 닿아 있는 동안은 프리뷰만 계속 보여줌 (설치는 안함)
         ProcessRaycast(touchPos, false);
 
-        // 손가락을 뗐을 때 '드래그'가 아닌 '클릭'인 경우만 실행
+        // 손가락을 뗐을 때, 움직인 거리가 짧다면 '클릭'으로 간주하여 실행
         if (touch.phase == TouchPhase.Ended)
         {
             float distance = Vector2.Distance(touchStartPos, touchPos);
-            if (distance < clickThreshold)
+            if (distance < touchThreshold)
             {
-                ProcessRaycast(touchPos, true); // 실제 설치/수확 실행
+                ProcessRaycast(touchPos, true); // 실제 설치/수확 진행
             }
 
             if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
 
-    // --- 에디터 마우스 로직 ---
+    // --- 에디터 마우스 처리 ---
     void HandleEditorInput()
     {
         Vector2 mousePos = Input.mousePosition;
 
-        // 마우스를 누르고 있는 동안은 미리보기
+        // 마우스를 누르고 있는 동안은 프리뷰만 업데이트
         ProcessRaycast(mousePos, false);
 
-        // 마우스를 떼는 순간에만 설치/수확 실행
+        // 마우스를 뗄 때만 설치/수확 실행
         if (Input.GetMouseButtonUp(0))
         {
             ProcessRaycast(mousePos, true);
             if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
+
 
     // 핵심 레이캐스트 로직 (통합) 
     void ProcessRaycast(Vector2 screenPos, bool isFinalAction)
