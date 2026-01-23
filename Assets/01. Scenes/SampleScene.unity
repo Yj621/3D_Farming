@@ -301,7 +301,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   moveSpeed: 0.01
-  mouseMoveSpeed: 3
+  mouseMoveSpeed: 0.01
   zoomSpeed: 0.01
   mouseZoomSpeed: 1
   minSize: 0.5
