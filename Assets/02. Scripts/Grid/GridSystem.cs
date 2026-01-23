@@ -24,15 +24,15 @@ public class GridSystem : MonoBehaviour
     [SerializeField] private bool isMudSelect = false; // 기본적으로 아무것도 선택X
     [SerializeField] private CropData currentSelectedCrop; // 선택된 씨앗 데이터
 
-    [Header("수확 이펙트 설정")]
-    [SerializeField] private GameObject floatingTextPrefab; // 위에서 만든 프리팹 연결
-    [SerializeField] private Canvas worldCanvas;
-
     private GridManager gridManager;   // 설치 데이터를 관리하는 GridManager 참조
     private GameObject previewInstance; // 씬에 생성되어 따라다닐 미리보기 인스턴스
     [Header("모바일 조작 설정")]
     [SerializeField] private float touchThreshold = 20f; // 드래그와 클릭을 구분하는 임계값
     private Vector2 touchStartPos;
+
+    [Header("드래그 최적화")]
+    private int lastX = -1;
+    private int lastZ = -1;
 
     void Start()
     {
@@ -91,19 +91,20 @@ public class GridSystem : MonoBehaviour
     {
         Vector2 mousePos = Input.mousePosition;
 
-        // 마우스를 누르고 있는 동안은 프리뷰만 업데이트
-        ProcessRaycast(mousePos, false);
-
-        // 마우스를 뗄 때만 설치/수확 실행
-        if (Input.GetMouseButtonUp(0))
+        if (Input.GetMouseButton(0)) // 마우스를 누르고 있는 동안
         {
             ProcessRaycast(mousePos, true);
+        }
+
+        if (Input.GetMouseButtonUp(0))
+        {
+            // 마우스를 떼면 마지막 기록 초기화 (다시 클릭했을 때 바로 심기게)
+            lastX = -1;
+            lastZ = -1;
             if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
 
-
-    // 핵심 레이캐스트 로직 (통합) 
     void ProcessRaycast(Vector2 screenPos, bool isFinalAction)
     {
         Ray ray = Camera.main.ScreenPointToRay(screenPos);
@@ -114,15 +115,20 @@ public class GridSystem : MonoBehaviour
             int xIdx = Mathf.FloorToInt(hit.point.x / cellSize);
             int zIdx = Mathf.FloorToInt(hit.point.z / cellSize);
 
+            // [최적화] 이전 프레임과 같은 칸이면 로직 실행 안 함
+            if (isFinalAction && xIdx == lastX && zIdx == lastZ) return;
+
             Vector3 snapPos = new Vector3(xIdx * cellSize + (cellSize / 2), 0, zIdx * cellSize + (cellSize / 2));
             float targetY = isMudSelect ? 0f : 0.16f;
 
-            // 시각적 미리보기 업데이트
             HandlePreview(snapPos, targetY, xIdx, zIdx);
 
-            // 실제 동작(설치/수확) 수행
             if (isFinalAction)
             {
+                // 칸이 바뀌었을 때만 좌표 업데이트 및 설치 시도
+                lastX = xIdx;
+                lastZ = zIdx;
+
                 if (isMudSelect || currentSelectedCrop != null)
                 {
                     PlaceAt(snapPos, xIdx, targetY, zIdx);
@@ -132,10 +138,6 @@ public class GridSystem : MonoBehaviour
                     TryHarvest(hit.point, xIdx, zIdx);
                 }
             }
-        }
-        else
-        {
-            if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
 
@@ -328,15 +330,10 @@ public class GridSystem : MonoBehaviour
     /// <param name="amount"></param>
     void ShowFloatingText(Vector3 pos, int amount)
     {
-        // 텍스트가 작물보다 약간 위에서 생성되도록 y값 조절
-        pos.y += 1f;
-
-        GameObject textObj = Instantiate(floatingTextPrefab, pos, Quaternion.identity, worldCanvas.transform);
-
-        //텍스트 내용 변경
-        if (textObj.TryGetComponent<TextMeshProUGUI>(out var tmp))
+        // 매니저를 통해 풀링된 객체 사용 (Instantiate 방지)
+        if (WorldUIManager.Instance != null)
         {
-            tmp.text = $"{amount}골드";
+            WorldUIManager.Instance.ShowFloatingText(pos, $"{amount}골드");
         }
     }
 
@@ -349,12 +346,9 @@ public class GridSystem : MonoBehaviour
 
     void PlantCrop(Vector3 pos, int x, int z)
     {
-        // 작물 프리팹 생성
         GameObject newCrop = Instantiate(cropPrefab, pos, Quaternion.identity);
-
         gridManager.PlaceObject(x, z, TileType.Crop);
 
-        // 생성된 작물에 Crop 스크립트를 가져와 데이터 전달
         if (newCrop.TryGetComponent<Crop>(out Crop crop))
         {
             crop.Initialize(currentSelectedCrop);

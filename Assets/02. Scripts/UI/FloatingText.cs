@@ -3,27 +3,51 @@ using UnityEngine;
 
 public class FloatingText : MonoBehaviour
 {
-    [SerializeField] private float moveSpeed = 2f; // 위로 올라가는 속도
-    [SerializeField] private float destoryTime = 1f; // 사라지는 시간
-
+    [SerializeField] private float moveSpeed = 2f; 
+    [SerializeField] private float destoryTime = 1f; 
+    private Transform camTransform; 
     private TextMeshProUGUI floatText;
-    private Color alpha;
+    private Color originalColor;
+    private float timer;
 
-    private void Start()
+    private void Awake()
     {
         floatText = GetComponent<TextMeshProUGUI>();
-        alpha = floatText.color;
+        originalColor = floatText.color;
+        if (Camera.main != null) camTransform = Camera.main.transform;
+    }
 
-        // 지정된 시간 뒤에 스스로 삭제
-        Destroy(gameObject, destoryTime);
+    // 풀에서 꺼낼 때 초기화하는 함수
+    public void Setup(Vector3 position, string text)
+    {
+        transform.position = position + Vector3.up; // 약간 위에서 생성
+        floatText.text = text;
+        floatText.color = originalColor;
+        timer = 0;
     }
 
     private void Update()
     {
-        transform.Translate(Vector3.up * moveSpeed * Time.deltaTime);
+        transform.Translate(Vector3.up * moveSpeed * Time.deltaTime, Space.World);
 
-        // 서서히 투명해지기
-        alpha.a = Mathf.Lerp(alpha.a , 0, Time.deltaTime * ( 1/ destoryTime ) );
-        floatText.color = alpha;
+        timer += Time.deltaTime;
+        float progress = timer / destoryTime;
+
+        // 투명도 조절
+        Color c = floatText.color;
+        c.a = Mathf.Lerp(originalColor.a, 0, progress);
+        floatText.color = c;
+
+        // 시간이 다 되면 풀로 반납
+        if (timer >= destoryTime)
+        {
+            WorldUIManager.Instance.ReturnToPool(this);
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (camTransform == null) return;
+        transform.LookAt(transform.position + camTransform.forward);
     }
 }

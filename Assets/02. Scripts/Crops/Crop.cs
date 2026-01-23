@@ -5,13 +5,58 @@ public class Crop : MonoBehaviour
     public CropData data;
     private int currentState = 0;
     private GameObject currentModel;
+    [SerializeField] private GameObject cropUIPrefab;
+    private CropUI cropUI;
 
     // 수확이 가능한지 
-    public bool IsFullGrown => currentState >= data.growthStagePrefabs.Length - 1;
+    public bool IsFullGrown => currentState >= data.growthStagePrefabs.Length - 1;private float growthTimer = 0f; // 현재 단계에서의 경과 시간
+
+void Update()
+{
+    if (IsFullGrown) return;
+
+    // 성장 타이머 진행
+    growthTimer += Time.deltaTime;
+    
+    // 전체 비율 계산 (현재 단계 + 현재 단계 내 진행도) / 총 단계
+    // 예: 3단계 중 1단계 완료 후 2단계 50% 진행 중이면 value는 0.5
+    float totalProgress = (currentState + (growthTimer / data.timeBetweenStages)) / (data.growthStagePrefabs.Length - 1);
+    
+    if (cropUI != null)
+    {
+        cropUI.UpdateProgress(totalProgress);
+    }
+
+    // 타이머가 간격에 도달하면 다음 단계로
+    if (growthTimer >= data.timeBetweenStages)
+    {
+        Grow();
+        growthTimer = 0f;
+    }
+}
+
+// 기존 Grow()에서 Invoke 관련 코드 제거
+void Grow()
+{
+    if (currentState < data.growthStagePrefabs.Length - 1)
+    {
+        currentState++;
+        UpdateModel();
+    }
+}    
+    
     public void Initialize(CropData cropData)
     {
         data = cropData;
         currentState = 0; // 0단계부터 시작 보장
+        GameObject canvasObj = GameObject.Find("World Space Canvas");
+        if (canvasObj != null && cropUIPrefab != null)
+        {
+            GameObject uiObj = Instantiate(cropUIPrefab, canvasObj.transform);
+            cropUI = uiObj.GetComponent<CropUI>();
+            cropUI.Setup(this.transform); // 나를 따라다니라고 지정
+            Debug.Log("UI 생성 시도");
+        }
 
         // 데이터가 정상인지 검사
         if (data == null || data.growthStagePrefabs == null || data.growthStagePrefabs.Length == 0)
@@ -43,23 +88,10 @@ public class Crop : MonoBehaviour
         Destroy(gameObject);
     }
 
-    void Grow()
-    {
-        if (currentState < data.growthStagePrefabs.Length - 1)
-        {
-            currentState++;
-            UpdateModel();
-            Debug.Log($"{gameObject.name}가 {currentState}단계로 성장했습니다.");
-        }
-        else
-        {
-            CancelInvoke("Grow");
-        }
-    }
-    
+
     void UpdateModel()
     {
-        if(currentModel != null) Destroy(currentModel);
+        if (currentModel != null) Destroy(currentModel);
 
         // 자식으로 생성하되, 생성된 모델의 Local Position을 0으로 맞춤
         currentModel = Instantiate(data.growthStagePrefabs[currentState], transform);
