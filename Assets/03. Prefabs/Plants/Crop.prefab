@@ -47,6 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   data: {fileID: 11400000, guid: d795bfdc73578eb438fbcac3d9ad1327, type: 2}
   cropUIPrefab: {fileID: 4326678726115815034, guid: 6fe41eb55faaa4628a6f60a16cfd03a9, type: 3}
+  growthParticlePrefab: {fileID: 950348094479844491, guid: 7b83e680d8aaecb42a9155045eae076a, type: 3}
 --- !u!65 &7769627755767583116
 BoxCollider:
   m_ObjectHideFlags: 0

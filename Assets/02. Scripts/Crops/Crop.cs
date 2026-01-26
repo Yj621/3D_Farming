@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -5,7 +6,7 @@ public class Crop : MonoBehaviour
 {
     public CropData data;
     private int currentState = 0;
-
+    private bool hasPlayedFullGrownEffect = false; // 파티클 중복 생성 방지용
     // 생성된 모델들을 미리 담아둘 리스트 (풀링)
     private List<GameObject> instantiatedModels = new List<GameObject>();
 
@@ -13,8 +14,10 @@ public class Crop : MonoBehaviour
     private CropUI cropUI;
     private Transform myTransform; // 트랜스포머 캐싱
 
+    [SerializeField] private GameObject growthParticlePrefab;
+
     // 수확이 가능한지 
-    public bool IsFullGrown => currentState >= data.growthStagePrefabs.Length - 1; 
+    public bool IsFullGrown => currentState >= data.growthStagePrefabs.Length - 1;
     private float growthTimer = 0f; // 현재 단계에서의 경과 시간
 
     private void Awake()
@@ -25,8 +28,22 @@ public class Crop : MonoBehaviour
 
     void Update()
     {
-        if (IsFullGrown) return;
+        if (IsFullGrown)
+        {
+            if (!hasPlayedFullGrownEffect)
+            {
+                PlayGrowthParticle();
+                hasPlayedFullGrownEffect = true;
 
+                // UI 제거 로직을 이쪽으로 이동
+                if (cropUI != null)
+                {
+                    Destroy(cropUI.gameObject);
+                    cropUI = null;
+                }
+            }
+            return;
+        }
         // 성장 타이머 진행
         growthTimer += Time.deltaTime;
 
@@ -44,6 +61,11 @@ public class Crop : MonoBehaviour
         {
             Grow();
             growthTimer = 0f;
+            if(IsFullGrown && cropUI != null)
+            {
+                Destroy(cropUI.gameObject);
+                cropUI = null;
+            }    
         }
     }
 
@@ -57,6 +79,17 @@ public class Crop : MonoBehaviour
         }
     }
 
+    void PlayGrowthParticle()
+    {
+        // 1. 생성할 위치 설정 (작물 머리 위로 0.5f만큼 올림)
+        Vector3 spawnPos = myTransform.position + Vector3.up * 0.5f;
+
+        // 2. 원하는 회전값 설정 (-90, 0, 0)
+        // Quaternion.Euler를 사용하면 우리가 아는 도(Degree) 단위 각도를 쿼터니언으로 변환해줍니다.
+        Quaternion spawnRot = Quaternion.Euler(-90f, 0f, 0f);
+        Instantiate(growthParticlePrefab, spawnPos, spawnRot);
+    }
+
     /// <summary>
     /// 농작물의 초기 설정을 담당하는 함수
     /// 데이터 할당, UI 생성, 모델 풀링(미리 생성)을 수행
@@ -65,6 +98,7 @@ public class Crop : MonoBehaviour
     {
         data = cropData; // 전달받은 작물 정보를 데이터 변수에 저장
         currentState = 0; // 성장 단계를 0(초기 상태)으로 초기화
+        hasPlayedFullGrownEffect = false;
 
         if (cropUI == null)
         {
@@ -123,10 +157,33 @@ public class Crop : MonoBehaviour
         // 미리 생성해둔 모델 리스트를 처음부터 끝까지 확인
         for (int i = 0; i < instantiatedModels.Count; i++)
         {
-            // 리스트의 인덱스(i)가 현재 성장 단계(currentState)와 같으면 true, 아니면 false를 전달
-            // 결과적으로 i번째 모델만 SetActive(true)가 되고 나머지는 모두 꺼짐
-            instantiatedModels[i].SetActive(i == currentState);
+            bool isCurrent = (i == currentState);
+            instantiatedModels[i].SetActive(isCurrent);
+
+            if (isCurrent)
+            {
+                StopAllCoroutines();
+                StartCoroutine(ScaleUpEffect(instantiatedModels[i].transform));
+            }
         }
+    }
+
+    IEnumerator ScaleUpEffect(Transform target)
+    {
+        //연출시간
+        float duration = 0.3f;
+        float timer = 0f;
+        Vector3 startScale = Vector3.zero;
+        Vector3 endScale = Vector3.one;
+
+        while (timer < duration)
+        {
+            timer += Time.deltaTime;
+            //서서히 커지는 효과
+            target.localScale = Vector3.Lerp(startScale, endScale, timer / duration);
+            yield return null;
+        }
+        target.localScale = endScale;
     }
 
     /// <summary>
