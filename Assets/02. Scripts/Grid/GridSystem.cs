@@ -12,6 +12,9 @@ public class GridSystem : MonoBehaviour
     [SerializeField] private CropData testCropData; // 토마토 CropData
     [SerializeField] private bool overwriteCrop = false; // 이미 Crop이면 덮어심을지
 
+    [Header("풀링 키")]
+    [SerializeField] private string mudPoolKey = "MUD";
+    [SerializeField] private string cropPoolKey = "CROP";
 
     [Header("설정")]
     [SerializeField] private float cellSize = 10f;       // 그리드 한 칸의 크기 (기본 Plane 10x10에 맞춤)
@@ -39,13 +42,11 @@ public class GridSystem : MonoBehaviour
     private int lastX = -1;
     private int lastZ = -1;
 
-
     void Start()
     {
         // 씬에 존재하는 GridManager를 찾아 참조 연결
         if (gridManager == null) gridManager = FindAnyObjectByType<GridManager>();
     }
-
 
     void Update()
     {
@@ -171,17 +172,21 @@ public class GridSystem : MonoBehaviour
                         // 골드 지급
                         InventoryManager.Instance.AddGoldGFromHarvest(reward);
 
-                        //텍스트 띄우기
-                        ShowFloatingText(targetPos, reward);
-
-                        crop.Harvest();
+                        crop.UI?.ShowGold(reward);
+                        crop.Harvest(); // 풀로 반납
                         gridManager.PlaceObject(x, z, TileType.Mud);
 
                         if (UIManager.Instance != null)
                         {
                             UIManager.Instance.AddHarvestCount();
                         }
-
+                        if (WorldUIManager.Instance != null)
+                        {
+                            WorldUIManager.Instance.ShowFloatingText(
+                                crop.transform.position + Vector3.up * 2f,
+                                $"+{reward} 골드"
+                            );
+                        }
                         Debug.Log($"[{x}, {z}] 수확 성공! 다시 심을 수 있습니다.");
                     }
                     else
@@ -193,6 +198,7 @@ public class GridSystem : MonoBehaviour
             }
         }
     }
+
     /// <summary>
     /// [테스트용] 모든 Mud 타일에 testCropData를 자동으로 심는다
     /// </summary>
@@ -240,43 +246,65 @@ public class GridSystem : MonoBehaviour
 
         Debug.Log($"[TEST] 토마토 일괄 파종 완료 : {plantedCount}개");
     }
+
+    /// <summary>
+    /// [테스트용] 지정한 그리드 좌표에 testCropData를 심는다 (풀링 버전)
+    /// </summary>
     private void PlantAtGrid(int x, int z)
     {
+        // 해당 칸의 월드 좌표 계산
         Vector3 pos = new Vector3(
             x * cellSize + (cellSize / 2f),
             0.16f,
             z * cellSize + (cellSize / 2f)
         );
 
-        GameObject cropObj = Instantiate(cropPrefab, pos, Quaternion.identity);
+        // Crop 풀에서 꺼내기
+        GameObject cropObj = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+
+        // 풀 키가 등록되지 않았거나 풀 매니저가 없으면 null이 올 수 있음
+        if (cropObj == null)
+        {
+            Debug.LogError($"[TEST] Crop 풀에서 오브젝트를 가져오지 못했습니다. key={cropPoolKey}");
+            return;
+        }
+
+        // 점유 데이터 갱신
         gridManager.PlaceObject(x, z, TileType.Crop);
 
+        // Crop 데이터 초기화
         if (cropObj.TryGetComponent<Crop>(out Crop crop))
         {
             crop.Initialize(testCropData);
         }
         else
         {
-            Debug.LogError("cropPrefab에 Crop 컴포넌트가 없습니다!");
-            Destroy(cropObj);
+            Debug.LogError("[TEST] cropPrefab(풀 대상)에 Crop 컴포넌트가 없습니다!");
             gridManager.PlaceObject(x, z, TileType.Mud);
+            PoolManager.Instance.Release(cropObj);
         }
     }
 
+    /// <summary>
+    /// [테스트/덮어심기용] 해당 그리드 좌표에 있는 기존 Crop을 풀로 반납한다
+    /// </summary>
     private void RemoveExistingCrop(int x, int z)
     {
+        // 해당 칸의 중심 좌표 계산
         Vector3 center = new Vector3(
             x * cellSize + (cellSize / 2f),
             0f,
             z * cellSize + (cellSize / 2f)
         );
 
+        // 주변의 콜라이더를 체크하여 Crop 오브젝트 탐색
         Collider[] cols = Physics.OverlapSphere(center, cellSize * 0.4f);
         foreach (var col in cols)
         {
             if (col.TryGetComponent<Crop>(out Crop crop))
             {
-                Destroy(crop.gameObject);
+                // Destroy 대신 풀로 반납
+                PoolManager.Instance.Release(crop.gameObject);
                 return;
             }
         }
@@ -295,7 +323,6 @@ public class GridSystem : MonoBehaviour
             previewInstance.SetActive(false);
         }
         Debug.Log("모든 선택 해제 - 수확 모드 활성화");
-
     }
 
     /// <summary>
@@ -392,24 +419,40 @@ public class GridSystem : MonoBehaviour
         // 밭 설치 모드일 때
         if (isMudSelect && gridManager.CanPlace(x, z))
         {
-            pos.y = 0f; // 밭은 무조건 바닥에 설치
-            Instantiate(mudPrefab, pos, Quaternion.identity);
+            pos.y = 0f;
+
+            // Mud 풀에서 꺼내기
+            PoolManager.Instance.Get(mudPoolKey, pos, Quaternion.identity);
+
             gridManager.PlaceObject(x, z, TileType.Mud);
-            Debug.Log($"[{x}, {z}] 위치에 밭 설치 성공");
+            return;
         }
         // 작물 설치 모드 (현재 칸이 정확히 Mud 상태여야만 함)
         // 만약 이미 작물을 심어서 TileType.Crop으로 변했다면, GetTileType은 Mud가 아니게 됨
         else if (!isMudSelect && currentSelectedCrop != null)
         {
-            TileType currentTile = gridManager.GetTileType(x, z);
-            if (gridManager.GetTileType(x, z) == TileType.Mud)
+            TileType t = gridManager.GetTileType(x, z);
+            Debug.Log($"심기 시도 - 좌표: {x},{z} / 타일타입: {t}"); // 로그 추가
+            if (t == TileType.Mud)
             {
                 pos.y = 0.16f;
-                PlantCrop(pos, x, z);
+
+                // Crop 풀에서 꺼내기
+                GameObject go = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+                gridManager.PlaceObject(x, z, TileType.Crop);
+
+                if (go.TryGetComponent<Crop>(out var crop))
+                    crop.Initialize(currentSelectedCrop);
+                else
+                {
+                    Debug.LogError("풀에서 나온 오브젝트에 Crop 컴포넌트가 없습니다!");
+                    gridManager.PlaceObject(x, z, TileType.Mud);
+                    PoolManager.Instance.Release(go);
+                }
             }
-            else if (currentTile == TileType.Crop)
+            else if (t == TileType.Crop)
             {
-                Debug.Log("여기는 이미 작물이 자라고 있습니다!"); // 이 로그가 찍히는지 확인하세요.
+                Debug.Log("여기는 이미 작물이 자라고 있습니다!");
             }
             else
             {
@@ -417,6 +460,7 @@ public class GridSystem : MonoBehaviour
             }
         }
     }
+
     /// <summary>
     /// 플로팅 텍스트(골드 획득 텍스트) 띄우기
     /// </summary>
@@ -437,24 +481,32 @@ public class GridSystem : MonoBehaviour
     /// <param name="pos"></param>
     /// <param name="x"></param>
     /// <param name="z"></param>
-
     void PlantCrop(Vector3 pos, int x, int z)
     {
-        GameObject newCrop = Instantiate(cropPrefab, pos, Quaternion.identity);
+        // Crop 풀에서 꺼내기
+        GameObject newCrop = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+
+        // 풀 키가 등록되지 않았거나 풀 매니저가 없으면 null이 올 수 있음
+        if (newCrop == null)
+        {
+            Debug.LogError($"Crop 풀에서 오브젝트를 가져오지 못했습니다. key={cropPoolKey}");
+            return;
+        }
+
+        // 점유 데이터 갱신
         gridManager.PlaceObject(x, z, TileType.Crop);
 
+        // Crop 데이터 초기화
         if (newCrop.TryGetComponent<Crop>(out Crop crop))
         {
             crop.Initialize(currentSelectedCrop);
             Debug.Log($"{currentSelectedCrop.cropName}을 심었습니다/");
         }
-
         else
         {
             Debug.LogError($"cropPrefab 루트에 Crop 컴포넌트가 없습니다! 프리팹을 확인하세요: {newCrop.name}");
             gridManager.PlaceObject(x, z, TileType.Mud);
-            Destroy(newCrop);
+            PoolManager.Instance.Release(newCrop);
         }
     }
 }
-

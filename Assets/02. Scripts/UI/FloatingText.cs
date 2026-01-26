@@ -1,53 +1,62 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 
 public class FloatingText : MonoBehaviour
 {
-    [SerializeField] private float moveSpeed = 2f; 
-    [SerializeField] private float destoryTime = 1f; 
-    private Transform camTransform; 
-    private TextMeshProUGUI floatText;
-    private Color originalColor;
-    private float timer;
+    [SerializeField] private TMP_Text tmp;
+    [SerializeField] private float moveSpeed = 1.5f; // 월드 좌표 기준 속도
+    [SerializeField] private float duration = 1.0f;
+
+    private RectTransform rt;
+    private Transform mainCamTransform;
 
     private void Awake()
     {
-        floatText = GetComponent<TextMeshProUGUI>();
-        originalColor = floatText.color;
-        if (Camera.main != null) camTransform = Camera.main.transform;
+        rt = GetComponent<RectTransform>();
+        if (tmp == null) tmp = GetComponentInChildren<TMP_Text>(true);
+
+        // 매 프레임 Camera.main을 호출하는 건 성능에 좋지 않으므로 미리 캐싱합니다.
+        if (Camera.main != null)
+            mainCamTransform = Camera.main.transform;
     }
 
-    // 풀에서 꺼낼 때 초기화하는 함수
-    public void Setup(Vector3 position, string text)
+    // 캔버스가 World Space일 때 카메라를 바라보게 함
+    private void LateUpdate()
     {
-        transform.position = position + Vector3.up; // 약간 위에서 생성
-        floatText.text = text;
-        floatText.color = originalColor;
-        timer = 0;
-    }
-
-    private void Update()
-    {
-        transform.Translate(Vector3.up * moveSpeed * Time.deltaTime, Space.World);
-
-        timer += Time.deltaTime;
-        float progress = timer / destoryTime;
-
-        // 투명도 조절
-        Color c = floatText.color;
-        c.a = Mathf.Lerp(originalColor.a, 0, progress);
-        floatText.color = c;
-
-        // 시간이 다 되면 풀로 반납
-        if (timer >= destoryTime)
+        if (mainCamTransform != null)
         {
-            WorldUIManager.Instance.ReturnToPool(this);
+            // 방법 1: 카메라와 평행하게 회전 (가장 깔끔함)
+            transform.rotation = mainCamTransform.rotation;
+
+            // 방법 2: 카메라를 직접 쳐다보게 함 (원근감에 따라 약간씩 기울어짐)
+            // transform.LookAt(transform.position + mainCamTransform.forward);
         }
     }
 
-    private void LateUpdate()
+    public void Setup(Vector3 worldPos, string text)
     {
-        if (camTransform == null) return;
-        transform.LookAt(transform.position + camTransform.forward);
+        if (tmp == null) tmp = GetComponentInChildren<TMP_Text>(true);
+        tmp.text = text;
+
+        // 월드 좌표로 직접 설정 (World Space Canvas인 경우)
+        transform.position = worldPos;
+
+        StopAllCoroutines();
+        StartCoroutine(MoveAndReturn());
+    }
+
+    private IEnumerator MoveAndReturn()
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            // 위로 이동 (World Space이므로 transform.Translate 사용 가능)
+            transform.Translate(Vector3.up * moveSpeed * Time.deltaTime);
+            yield return null;
+        }
+
+        WorldUIManager.Instance.ReturnToPool(this);
     }
 }

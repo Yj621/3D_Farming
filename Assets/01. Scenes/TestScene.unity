@@ -255,6 +255,58 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 197866443}
   m_CullTransparentMesh: 1
+--- !u!1 &233276835
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 233276837}
+  - component: {fileID: 233276836}
+  m_Layer: 0
+  m_Name: Pool
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &233276836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 233276835}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b764b4b6a2765e8448174a0630f58235, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  pools:
+  - key: MUD
+    prefab: {fileID: 8209775890509911002, guid: 8e161e49f4db0804bb8c90983594c656, type: 3}
+    prewarm: 20
+  - key: CROP
+    prefab: {fileID: 7167003115135425991, guid: 34041c0b845e31a499b8cd9f98e241c6, type: 3}
+    prewarm: 20
+  poolRoot: {fileID: 233276837}
+--- !u!4 &233276837
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 233276835}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.0000076293945, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &249988110
 GameObject:
   m_ObjectHideFlags: 0
@@ -2462,6 +2514,10 @@ PrefabInstance:
       propertyPath: worldCanvas
       value: 
       objectReference: {fileID: 1100142005}
+    - target: {fileID: 3150439585462132693, guid: 812f2239d58e72048934361f5178d531, type: 3}
+      propertyPath: testCropData
+      value: 
+      objectReference: {fileID: 11400000, guid: d795bfdc73578eb438fbcac3d9ad1327, type: 2}
     - target: {fileID: 7346488073879018754, guid: 812f2239d58e72048934361f5178d531, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2529,3 +2585,4 @@ SceneRoots:
   - {fileID: 858628881}
   - {fileID: 1685815105}
   - {fileID: 969886388}
+  - {fileID: 233276837}
