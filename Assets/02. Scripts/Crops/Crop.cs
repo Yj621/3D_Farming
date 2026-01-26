@@ -10,8 +10,7 @@ public class Crop : MonoBehaviour
     // 생성된 모델들을 미리 담아둘 리스트 (풀링)
     private List<GameObject> instantiatedModels = new List<GameObject>();
 
-    [SerializeField] private GameObject cropUIPrefab;
-    private CropUI cropUI;
+    [SerializeField] private CropUI cropUI;
     private Transform myTransform; // 트랜스포머 캐싱
 
     [SerializeField] private GameObject growthParticlePrefab;
@@ -53,7 +52,12 @@ public class Crop : MonoBehaviour
 
         if (cropUI != null)
         {
-            cropUI.UpdateProgress(totalProgress);
+            cropUI.SetFillAmount(totalProgress); 
+            if(totalProgress >= 1f)
+            {
+                Destroy(cropUI.gameObject);
+                cropUI = null;
+            }
         }
 
         // 타이머가 간격에 도달하면 다음 단계로
@@ -81,11 +85,11 @@ public class Crop : MonoBehaviour
 
     void PlayGrowthParticle()
     {
-        // 1. 생성할 위치 설정 (작물 머리 위로 0.5f만큼 올림)
-        Vector3 spawnPos = myTransform.position + Vector3.up * 0.5f;
+        // 생성할 위치 설정 (작물 머리 위로 0.5f만큼 올림)
+        Vector3 spawnPos = myTransform.position;
 
-        // 2. 원하는 회전값 설정 (-90, 0, 0)
-        // Quaternion.Euler를 사용하면 우리가 아는 도(Degree) 단위 각도를 쿼터니언으로 변환해줍니다.
+        // 원하는 회전값 설정 (-90, 0, 0)
+        // Quaternion.Euler를 사용하면 우리가 아는 도(Degree) 단위 각도를 쿼터니언으로 변환
         Quaternion spawnRot = Quaternion.Euler(-90f, 0f, 0f);
         Instantiate(growthParticlePrefab, spawnPos, spawnRot);
     }
@@ -99,21 +103,6 @@ public class Crop : MonoBehaviour
         data = cropData; // 전달받은 작물 정보를 데이터 변수에 저장
         currentState = 0; // 성장 단계를 0(초기 상태)으로 초기화
         hasPlayedFullGrownEffect = false;
-
-        if (cropUI == null)
-        {
-            GameObject canvasObj = GameObject.Find("World Space Canvas");
-
-            if (canvasObj != null && cropUIPrefab != null)
-            {
-                // UI 프리팹을 캔버스의 자식으로 생성
-                GameObject uiObj = Instantiate(cropUIPrefab, canvasObj.transform);
-                // 생성된 UI 객체에서 CropUI 컴포넌트를 가져오기
-                cropUI = uiObj.GetComponent<CropUI>();
-                // UI가 현재 작물(myTransform)을 따라다니도록 타겟을 지정
-                cropUI.Setup(myTransform);
-            }
-        }
 
         // 성장에 필요한 모든 모델을 게임 시작(초기화) 시점에 미리 생성
         PreInstantiateModels();
@@ -194,7 +183,4 @@ public class Crop : MonoBehaviour
         Debug.Log($"{data.cropName} 수확 완료!");
         Destroy(gameObject);
     }
-
-
-
 }

@@ -8,6 +8,11 @@ using UnityEngine;
 /// </summary>
 public class GridSystem : MonoBehaviour
 {
+    [Header("테스트 - 밭 전체 파종")]
+    [SerializeField] private CropData testCropData; // 토마토 CropData
+    [SerializeField] private bool overwriteCrop = false; // 이미 Crop이면 덮어심을지
+
+
     [Header("설정")]
     [SerializeField] private float cellSize = 10f;       // 그리드 한 칸의 크기 (기본 Plane 10x10에 맞춤)
     [SerializeField] private LayerMask groundLayer;      // 레이캐스트가 감지할 바닥 레이어
@@ -33,6 +38,7 @@ public class GridSystem : MonoBehaviour
     [Header("드래그 최적화")]
     private int lastX = -1;
     private int lastZ = -1;
+
 
     void Start()
     {
@@ -184,6 +190,94 @@ public class GridSystem : MonoBehaviour
                     }
                     break;
                 }
+            }
+        }
+    }
+    /// <summary>
+    /// [테스트용] 모든 Mud 타일에 testCropData를 자동으로 심는다
+    /// </summary>
+    public void OnClickPlantAllMudForTest()
+    {
+        if (gridManager == null)
+            gridManager = FindAnyObjectByType<GridManager>();
+
+        if (gridManager == null)
+        {
+            Debug.LogError("GridManager를 찾지 못했습니다.");
+            return;
+        }
+
+        if (testCropData == null)
+        {
+            Debug.LogError("testCropData(토마토 CropData)를 지정하세요.");
+            return;
+        }
+
+        int plantedCount = 0;
+
+        for (int x = 0; x < gridManager.width; x++)
+        {
+            for (int z = 0; z < gridManager.height; z++)
+            {
+                TileType tile = gridManager.GetTileType(x, z);
+
+                // Mud만 심기
+                if (tile == TileType.Mud)
+                {
+                    PlantAtGrid(x, z);
+                    plantedCount++;
+                }
+                // 이미 Crop인데 덮어심기 옵션이 켜져 있으면
+                else if (overwriteCrop && tile == TileType.Crop)
+                {
+                    RemoveExistingCrop(x, z);
+                    gridManager.PlaceObject(x, z, TileType.Mud);
+                    PlantAtGrid(x, z);
+                    plantedCount++;
+                }
+            }
+        }
+
+        Debug.Log($"[TEST] 토마토 일괄 파종 완료 : {plantedCount}개");
+    }
+    private void PlantAtGrid(int x, int z)
+    {
+        Vector3 pos = new Vector3(
+            x * cellSize + (cellSize / 2f),
+            0.16f,
+            z * cellSize + (cellSize / 2f)
+        );
+
+        GameObject cropObj = Instantiate(cropPrefab, pos, Quaternion.identity);
+        gridManager.PlaceObject(x, z, TileType.Crop);
+
+        if (cropObj.TryGetComponent<Crop>(out Crop crop))
+        {
+            crop.Initialize(testCropData);
+        }
+        else
+        {
+            Debug.LogError("cropPrefab에 Crop 컴포넌트가 없습니다!");
+            Destroy(cropObj);
+            gridManager.PlaceObject(x, z, TileType.Mud);
+        }
+    }
+
+    private void RemoveExistingCrop(int x, int z)
+    {
+        Vector3 center = new Vector3(
+            x * cellSize + (cellSize / 2f),
+            0f,
+            z * cellSize + (cellSize / 2f)
+        );
+
+        Collider[] cols = Physics.OverlapSphere(center, cellSize * 0.4f);
+        foreach (var col in cols)
+        {
+            if (col.TryGetComponent<Crop>(out Crop crop))
+            {
+                Destroy(crop.gameObject);
+                return;
             }
         }
     }
