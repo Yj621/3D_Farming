@@ -2,11 +2,22 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
+/// 풀에서 꺼낼 때/돌려보낼 때 필요한 초기화/정리를 구현하는 인터페이스
+/// </summary>
+public interface IPoolable
+{
+    void OnGetFromPool();
+    void OnReturnToPool();
+}
+
+/// <summary>
 /// 프리팹을 미리 생성해두고(Get) / 다시 돌려보내는(Release) 간단 풀 매니저
 /// Instantiate/Destroy 반복을 줄여 성능과 GC를 개선한다
 /// </summary>
+/// 
 public class PoolManager : MonoBehaviour
 {
+
     [System.Serializable]
     public class PoolConfig
     {
@@ -128,13 +139,4 @@ public class PoolManager : MonoBehaviour
         // 다시 큐에 넣기
         dict[key].Enqueue(go);
     }
-}
-
-/// <summary>
-/// 풀에서 꺼낼 때/돌려보낼 때 필요한 초기화/정리를 구현하는 인터페이스
-/// </summary>
-public interface IPoolable
-{
-    void OnGetFromPool();
-    void OnReturnToPool();
 }
