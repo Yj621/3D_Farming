@@ -8,4 +8,5 @@ public class CropData : ScriptableObject
     // 성장 단계별 프리팹 배열 (0: 씨앗, 1: 새싹, 2: 성장기, 3: 수확기)
     public GameObject[] growthStagePrefabs;
     public int sellingPrice;
+    public int purchasePrice;
 }

@@ -24,6 +24,9 @@ public class GridSystem : MonoBehaviour
     [SerializeField] private GameObject mudPreviewPrefab;   // 설치 전 보여줄 투명한 미리보기용 프리팹
     [SerializeField] private GameObject mudPrefab;      // 실제로 설치될 완성된 오브젝트 프리팹
 
+    [Header("밭 가격 설정")]
+    [SerializeField] private int mudPrice = 50;
+
     [Header("작물 설정")]
     [SerializeField] private GameObject previewCropPrefab;
     [SerializeField] private GameObject cropPrefab;    // Crop 스크립트가 붙어있는 빈 오브젝트 프리팹
@@ -419,12 +422,16 @@ public class GridSystem : MonoBehaviour
         // 밭 설치 모드일 때
         if (isMudSelect && gridManager.CanPlace(x, z))
         {
-            pos.y = 0f;
+            if (InventoryManager.Instance.TrySpendGold(mudPrice))
+            {
+                pos.y = 0f;
+                // Mud 풀에서 꺼내기
+                PoolManager.Instance.Get(mudPoolKey, pos, Quaternion.identity);
 
-            // Mud 풀에서 꺼내기
-            PoolManager.Instance.Get(mudPoolKey, pos, Quaternion.identity);
+                gridManager.PlaceObject(x, z, TileType.Mud);
+                Debug.Log($"밭 구매 설치 완료! -{mudPrice}G");
+            }
 
-            gridManager.PlaceObject(x, z, TileType.Mud);
             return;
         }
         // 작물 설치 모드 (현재 칸이 정확히 Mud 상태여야만 함)
@@ -435,79 +442,79 @@ public class GridSystem : MonoBehaviour
             Debug.Log($"심기 시도 - 좌표: {x},{z} / 타일타입: {t}"); // 로그 추가
             if (t == TileType.Mud)
             {
-                pos.y = 0.16f;
+                if (InventoryManager.Instance.TrySpendGold(currentSelectedCrop.purchasePrice))
 
-                // Crop 풀에서 꺼내기
-                GameObject go = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
-                gridManager.PlaceObject(x, z, TileType.Crop);
+                {
+                    pos.y = 0.16f;
 
-                if (go.TryGetComponent<Crop>(out var crop))
-                    crop.Initialize(currentSelectedCrop);
+                    // Crop 풀에서 꺼내기
+                    GameObject go = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+                    gridManager.PlaceObject(x, z, TileType.Crop);
+
+                    if (go.TryGetComponent<Crop>(out var crop))
+                        crop.Initialize(currentSelectedCrop);
+                    Debug.Log($"{currentSelectedCrop.cropName} 씨앗 구매 완료! -{currentSelectedCrop.purchasePrice}G");
+
+                }
+                else if (t == TileType.Crop)
+                {
+                    Debug.Log("여기는 이미 작물이 자라고 있습니다!");
+                }
                 else
                 {
-                    Debug.LogError("풀에서 나온 오브젝트에 Crop 컴포넌트가 없습니다!");
-                    gridManager.PlaceObject(x, z, TileType.Mud);
-                    PoolManager.Instance.Release(go);
+                    Debug.Log("밭이 아닌 곳에는 심을 수 없습니다.");
                 }
             }
-            else if (t == TileType.Crop)
-            {
-                Debug.Log("여기는 이미 작물이 자라고 있습니다!");
-            }
-            else
-            {
-                Debug.Log("밭이 아닌 곳에는 심을 수 없습니다.");
-            }
         }
+
+        /*
+          /// <summary>
+          /// 플로팅 텍스트(골드 획득 텍스트) 띄우기
+          /// </summary>
+          /// <param name="pos"></param>
+          /// <param name="amount"></param>
+          void ShowFloatingText(Vector3 pos, int amount)
+          {
+              // 매니저를 통해 풀링된 객체 사용 (Instantiate 방지)
+              if (WorldUIManager.Instance != null)
+              {
+                  WorldUIManager.Instance.ShowFloatingText(pos, $"{amount}골드");
+              }
+          }
+
+        /// <summary>
+          /// 식물 심기
+          /// </summary>
+          /// <param name="pos"></param>
+          /// <param name="x"></param>
+          /// <param name="z"></param>
+          void PlantCrop(Vector3 pos, int x, int z)
+          {
+              // Crop 풀에서 꺼내기
+              GameObject newCrop = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+
+              // 풀 키가 등록되지 않았거나 풀 매니저가 없으면 null이 올 수 있음
+              if (newCrop == null)
+              {
+                  Debug.LogError($"Crop 풀에서 오브젝트를 가져오지 못했습니다. key={cropPoolKey}");
+                  return;
+              }
+
+              // 점유 데이터 갱신
+              gridManager.PlaceObject(x, z, TileType.Crop);
+
+              // Crop 데이터 초기화
+              if (newCrop.TryGetComponent<Crop>(out Crop crop))
+              {
+                  crop.Initialize(currentSelectedCrop);
+                  Debug.Log($"{currentSelectedCrop.cropName}을 심었습니다/");
+              }
+              else
+              {
+                  Debug.LogError($"cropPrefab 루트에 Crop 컴포넌트가 없습니다! 프리팹을 확인하세요: {newCrop.name}");
+                  gridManager.PlaceObject(x, z, TileType.Mud);
+                  PoolManager.Instance.Release(newCrop);
+              }
+          }*/
     }
-
-    /*
-      /// <summary>
-      /// 플로팅 텍스트(골드 획득 텍스트) 띄우기
-      /// </summary>
-      /// <param name="pos"></param>
-      /// <param name="amount"></param>
-      void ShowFloatingText(Vector3 pos, int amount)
-      {
-          // 매니저를 통해 풀링된 객체 사용 (Instantiate 방지)
-          if (WorldUIManager.Instance != null)
-          {
-              WorldUIManager.Instance.ShowFloatingText(pos, $"{amount}골드");
-          }
-      }
-
-    /// <summary>
-      /// 식물 심기
-      /// </summary>
-      /// <param name="pos"></param>
-      /// <param name="x"></param>
-      /// <param name="z"></param>
-      void PlantCrop(Vector3 pos, int x, int z)
-      {
-          // Crop 풀에서 꺼내기
-          GameObject newCrop = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
-
-          // 풀 키가 등록되지 않았거나 풀 매니저가 없으면 null이 올 수 있음
-          if (newCrop == null)
-          {
-              Debug.LogError($"Crop 풀에서 오브젝트를 가져오지 못했습니다. key={cropPoolKey}");
-              return;
-          }
-
-          // 점유 데이터 갱신
-          gridManager.PlaceObject(x, z, TileType.Crop);
-
-          // Crop 데이터 초기화
-          if (newCrop.TryGetComponent<Crop>(out Crop crop))
-          {
-              crop.Initialize(currentSelectedCrop);
-              Debug.Log($"{currentSelectedCrop.cropName}을 심었습니다/");
-          }
-          else
-          {
-              Debug.LogError($"cropPrefab 루트에 Crop 컴포넌트가 없습니다! 프리팹을 확인하세요: {newCrop.name}");
-              gridManager.PlaceObject(x, z, TileType.Mud);
-              PoolManager.Instance.Release(newCrop);
-          }
-      }*/
 }

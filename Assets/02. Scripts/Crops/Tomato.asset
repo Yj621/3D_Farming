@@ -13,10 +13,11 @@ MonoBehaviour:
   m_Name: Tomato
   m_EditorClassIdentifier: 
   cropName: Tomato
+  timeBetweenStages: 5
   growthStagePrefabs:
   - {fileID: 2630425031254273193, guid: 2e4dc950a7d35e145a6f0f7dfacf00cb, type: 3}
   - {fileID: 6651310731303358679, guid: 5993c0ff256760a4ba768d27065f070a, type: 3}
   - {fileID: 5054277889059016994, guid: 973ebfddefab1324c941b6c80675d3d8, type: 3}
   - {fileID: 9218926353566358502, guid: e2000999f10c63c48bb47dd40b31efcd, type: 3}
-  timeBetweenStages: 5
-  sellingPrice: 50
+  sellingPrice: 110
+  purchasePrice: 100
