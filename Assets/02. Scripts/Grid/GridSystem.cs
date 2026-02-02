@@ -1,6 +1,8 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+
 
 /// <summary>
 /// 마우스 입력을 받아 그리드 상에 오브젝트를 배치하고 
@@ -37,6 +39,14 @@ public class GridSystem : MonoBehaviour
 
     private GridManager gridManager;   // 설치 데이터를 관리하는 GridManager 참조
     private GameObject previewInstance; // 씬에 생성되어 따라다닐 미리보기 인스턴스
+
+    [Header("배치 UI")]
+    [Tooltip("체크, 취소 버튼이 있는 부모 객체")]
+    [SerializeField] private GameObject placementUIPanel; // 체크, 취소 버튼이 있는 부모 객체
+    private Vector3 pendingPosition;
+    private int pendingX, pendingZ;
+
+
     [Header("모바일 조작 설정")]
     [SerializeField] private float touchThreshold = 20f; // 드래그와 클릭을 구분하는 임계값
     private Vector2 touchStartPos;
@@ -45,6 +55,8 @@ public class GridSystem : MonoBehaviour
     private int lastX = -1;
     private int lastZ = -1;
 
+    public static GridSystem Instance;
+    void Awake() => Instance=this;
     void Start()
     {
         // 씬에 존재하는 GridManager를 찾아 참조 연결
@@ -53,26 +65,22 @@ public class GridSystem : MonoBehaviour
 
     void Update()
     {
-        // 1. 입력 처리 분기 (모바일 터치 vs 에디터 마우스)
-        if (Input.touchCount > 0)
-        {
-            HandleMobileInput();
-        }
-        else if (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))
-        {
-            HandleEditorInput();
-        }
-        else
-        {
-            // 입력이 전혀 없으면 프리뷰 끄기
-            if (previewInstance != null) previewInstance.SetActive(false);
-        }
+        // V/X 떠 있으면 월드 입력 중지 (버튼 클릭만 되게)
+        if (placementUIPanel != null && placementUIPanel.activeSelf)
+            return;
+
+        if (Input.touchCount > 0) HandleMobileInput();
+        else HandleEditorInput(); // PC일 때는 HandleEditorInput만 타게 정리해도 됨
     }
 
     // --- 모바일 터치 처리 ---
     void HandleMobileInput()
     {
         Touch touch = Input.GetTouch(0);
+        // UI 터치면 월드 배치 로직 무시
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+            return;
+
         Vector2 touchPos = touch.position;
 
         if (touch.phase == TouchPhase.Began)
@@ -99,19 +107,25 @@ public class GridSystem : MonoBehaviour
     // --- 에디터 마우스 처리 ---
     void HandleEditorInput()
     {
+        bool overUI = (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject());
+
+        // 배치 확정 UI(V/X) 떠 있을 때만 입력 차단
+        if (overUI && placementUIPanel != null && placementUIPanel.activeSelf)
+            return;
+
         Vector2 mousePos = Input.mousePosition;
 
-        if (Input.GetMouseButton(0)) // 마우스를 누르고 있는 동안
-        {
+        // 누른 순간만 처리 - 드래그 프레임마다 UI 뜨는거 방지
+        if (Input.GetMouseButtonDown(0))
             ProcessRaycast(mousePos, true);
-        }
+
+        // 프리뷰는 계속 따라다니게
+        ProcessRaycast(mousePos, false);
 
         if (Input.GetMouseButtonUp(0))
         {
-            // 마우스를 떼면 마지막 기록 초기화 (다시 클릭했을 때 바로 심기게)
             lastX = -1;
             lastZ = -1;
-            if (previewInstance != null) previewInstance.SetActive(false);
         }
     }
 
@@ -129,28 +143,98 @@ public class GridSystem : MonoBehaviour
             if (isFinalAction && xIdx == lastX && zIdx == lastZ) return;
 
             Vector3 snapPos = new Vector3(xIdx * cellSize + (cellSize / 2), 0, zIdx * cellSize + (cellSize / 2));
-            float targetY = isMudSelect ? 0f : 0.16f;
+            // 1. 프리뷰 처리 (무언가 선택했을 때만)
+            if (isMudSelect || currentSelectedCrop != null)
+            {
+                HandlePreview(snapPos, isMudSelect ? 0f : 0.16f, xIdx, zIdx);
+            }
 
-            HandlePreview(snapPos, targetY, xIdx, zIdx);
-
+            // 2. 최종 액션 (클릭 시)
             if (isFinalAction)
             {
-                // 칸이 바뀌었을 때만 좌표 업데이트 및 설치 시도
-                lastX = xIdx;
-                lastZ = zIdx;
+                // 설치 가능한 상태일 때만 UI 띄움
+                bool canPlace = isMudSelect ? gridManager.CanPlace(xIdx, zIdx) : (gridManager.GetTileType(xIdx, zIdx) == TileType.Mud);
 
-                if (isMudSelect || currentSelectedCrop != null)
+                if (canPlace)
                 {
-                    PlaceAt(snapPos, xIdx, targetY, zIdx);
+                    pendingPosition = snapPos;
+                    pendingX = xIdx;
+                    pendingZ = zIdx;
+
+                    // 좌표 기록 후 UI 출력
+                    ShowPlacementUI(snapPos);
                 }
-                else
+                else if (!isMudSelect && currentSelectedCrop == null)
                 {
+                    // 아무것도 안 들고 있다면 수확 모드
                     TryHarvest(hit.point, xIdx, zIdx);
                 }
             }
         }
     }
 
+    // --------- 상점 ----------
+
+    /// <summary>
+    /// 상점에서 아이템(밭 또는 작물) 클릭 시 호출될 통합 함수
+    /// </summary>
+    public void SelectItemFromShop(CropData data, bool isMud)
+    {
+        // 1. 데이터 및 상태 설정
+        isMudSelect = isMud;
+        currentSelectedCrop = isMud ? null : data;
+
+        // 2. 프리뷰 즉시 생성 및 기존 프리뷰 교체
+        UpdatePreviewInstance(isMud ? mudPreviewPrefab : previewCropPrefab);
+
+        // 3. 배치 UI(V/X)는 위치가 확정될 때까지 숨김
+        if (placementUIPanel != null) placementUIPanel.SetActive(false);
+
+        // 4. 상점 UI 닫기
+        if (ShopManager.Instance != null) ShopManager.Instance.CloseShop();
+
+        // [핵심] 상점이 닫히자마자 현재 마우스 위치에 프리뷰를 갖다 놓도록 강제 호출
+        ProcessRaycast(Input.mousePosition, false);
+
+        Debug.Log(isMud ? "밭 배치 모드 시작" : $"{data.cropName} 심기 모드 시작");
+    
+}
+
+    void ShowPlacementUI(Vector3 worldPos)
+    {
+        if (placementUIPanel == null) return;
+
+        placementUIPanel.SetActive(true);
+
+        // World Space Canvas이므로 3D 좌표를 그대로 사용
+        // 밭(0)보다 위로 띄워야 하므로 Vector3.up 사용
+        Vector3 uiWorldPos = worldPos + Vector3.up * 1.5f;
+
+        // RectTransform이 아닌 일반 transform.position에 직접 대입
+        placementUIPanel.transform.position = uiWorldPos;
+
+        // UI가 항상 카메라를 바라보게 설정 (선택 사항)
+        placementUIPanel.transform.rotation = Camera.main.transform.rotation;
+    }
+
+    /// <summary>
+    /// 체크버튼 누르기
+    /// </summary>
+    public void OnClickConfirmPlacement()
+    {
+        PlaceAt(pendingPosition, pendingX, 0, pendingZ);
+        placementUIPanel.SetActive(false);
+    }
+
+    /// <summary>
+    /// 취소버튼 누르기
+    /// </summary>
+    public void OnClickCanclePlacement()
+    {
+        placementUIPanel.SetActive(false);
+        //선택 모드 해제
+        OnClickClearSelection();
+    }
     void TryHarvest(Vector3 hitPoint, int x, int z)
     {
         // 현재 칸이 작물 상태인지 확인
@@ -166,17 +250,16 @@ public class GridSystem : MonoBehaviour
             {
                 if (col.TryGetComponent<Crop>(out Crop crop))
                 {
-                    // 다 자랐는지 확인
                     if (crop.IsFullGrown)
                     {
-                        // 판매 금액 결정
-                        int reward = crop.data.sellingPrice;
+                        // 1. 골드 지급
+                        InventoryManager.Instance.AddGoldGFromHarvest(crop.data.sellingPrice);
 
-                        // 골드 지급
-                        InventoryManager.Instance.AddGoldGFromHarvest(reward);
+                        // 2. 경험치 지급 
+                        ExpManager.Instance.AddExp(crop.data.expReward);
 
-                        crop.UI?.ShowGold(reward);
-                        crop.Harvest(); // 풀로 반납
+                        // 3. 수확 연출 및 데이터 갱신
+                        crop.Harvest();
                         gridManager.PlaceObject(x, z, TileType.Mud);
 
                         if (UIManager.Instance != null)
@@ -187,7 +270,7 @@ public class GridSystem : MonoBehaviour
                         {
                             WorldUIManager.Instance.ShowFloatingText(
                                 crop.transform.position + Vector3.up * 2f,
-                                $"+{reward} 골드"
+                                $"+{crop.data.sellingPrice} 골드"
                             );
                         }
                         Debug.Log($"[{x}, {z}] 수확 성공! 다시 심을 수 있습니다.");
@@ -329,7 +412,7 @@ public class GridSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 선택된 모드에 맞춰 미리보기(Preview) 모델을 교체합니다.
+    /// 선택된 모드에 맞춰 미리보기(Preview) 모델을 교체
     /// </summary>
     void UpdatePreviewInstance(GameObject newPrefab)
     {
