@@ -11,19 +11,46 @@ public class ShopItemUI : MonoBehaviour
     public int unlockLevel;   // 해금 레벨
     public GameObject lockObject; // 자물쇠 이미지
 
+    private Button button;
+
+    private void Awake()
+    {
+        button = GetComponent<Button>();
+    }
+
+    private void OnEnable()
+    {
+        // 레벨업 이벤트 구독
+        if (ExpManager.Instance != null)
+            ExpManager.Instance.OnLevelUp += OnLevelUp;
+
+        RefreshUI();
+    }
+    private void OnDisable()
+    {
+        // 반드시 해제
+        if (ExpManager.Instance != null)
+            ExpManager.Instance.OnLevelUp -= OnLevelUp;
+    }
+
     private void Start()
     {
-        // 버튼 클릭 시 OnClickItem 함수가 실행되도록 연결
-        GetComponent<Button>().onClick.AddListener(OnClickItem);
+        button.onClick.AddListener(OnClickItem);
         RefreshUI();
     }
 
+    private void OnLevelUp(int newLevel)
+    {
+        RefreshUI();
+    }
     public void RefreshUI()
     {
         // 경험치 매니저의 레벨을 체크하여 잠금 처리
         bool isLocked = ExpManager.Instance.currentLevel < unlockLevel;
-        if (lockObject != null) lockObject.SetActive(isLocked);
-        GetComponent<Button>().interactable = !isLocked;
+        if (lockObject != null)
+            lockObject.SetActive(isLocked);
+
+        button.interactable = !isLocked;
     }
 
     public void OnClickItem()

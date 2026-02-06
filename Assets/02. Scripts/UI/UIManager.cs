@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class UIManager : MonoBehaviour
 {
@@ -13,6 +14,9 @@ public class UIManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI txt_Harvest;
     private int harvestCount = 0;
 
+    [Header("배치 UI")]
+    [SerializeField] private GameObject placeUI;
+    [SerializeField] private Image currentStateImage;
     private void Awake()
     {
         Instance = this;
@@ -46,5 +50,22 @@ public class UIManager : MonoBehaviour
     public void UpdateHarvestUI(int count)
     {
         if (txt_Harvest != null) txt_Harvest.text = $"수확한 작물 : {count}개";
+    }
+
+    public void OnPlaceUI(bool isOn, CropData data, bool isMud, bool isBuilding = false)
+    {
+        placeUI.SetActive(isOn);
+
+        if(!isOn || data == null)
+        {
+            currentStateImage.sprite = null;
+            currentStateImage.color = Color.clear;
+            return;
+        }
+        else
+        {
+            currentStateImage.sprite = data.icon;
+            currentStateImage.color = Color.white;
+        }
     }
 }

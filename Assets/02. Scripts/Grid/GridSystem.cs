@@ -1,6 +1,11 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
+/// <summary>
+/// 마우스 입력을 받아 그리드 상에 오브젝트를 배치하고 
+/// 배치 가능 여부를 시각적으로 보여주는 클래스
+/// </summary>
 public class GridSystem : MonoBehaviour
 {
     public static GridSystem Instance;
@@ -8,6 +13,7 @@ public class GridSystem : MonoBehaviour
     [Header("풀링 키")]
     [SerializeField] private string mudPoolKey = "MUD";
     [SerializeField] private string cropPoolKey = "CROP";
+    [SerializeField] private string buildingPoolKey = "BUILDING";
 
     [Header("설정")]
     [SerializeField] private float cellSize = 10f;
@@ -16,174 +22,321 @@ public class GridSystem : MonoBehaviour
     [Header("프리뷰 프리팹")]
     [SerializeField] private GameObject mudPreviewPrefab;
     [SerializeField] private GameObject previewCropPrefab;
+    [SerializeField] private GameObject buildingPreviewPrefab;
 
     [Header("가격")]
     [SerializeField] private int mudPrice = 50;
 
     [Header("배치 UI(V/X)")]
     [SerializeField] private GameObject placementUIPanel;
-
-    [Header("연속 설치 방향")]
-    [Tooltip("오른쪽으로 연속 설치: stepX=1, stepZ=0")]
-    [SerializeField] private int stepX = 1;
-    [SerializeField] private int stepZ = 0;
-
-    [Header("모바일 조작")]
-    [SerializeField] private float touchThreshold = 20f;
-    private Vector2 touchStartPos;
+    // (x,z) 칸에 배치된 실제 오브젝트 저장
+    private Dictionary<Vector2Int, GameObject> placedObjects = new Dictionary<Vector2Int, GameObject>();
+    private Vector2Int Key(int x, int z) => new Vector2Int(x, z);
 
     // ====== 상태 ======
     private enum PlaceState
     {
         None,            // 아무것도 선택 안 함(수확모드)
-        Aiming,          // 아이템 선택됨, 프리뷰 따라다님 (첫 클릭으로 앵커 잡기 전)
-        Anchored         // 앵커(기준 위치) 확정됨, V/X 활성화
+        Placing          // 배치 모드 활성화 상태
     }
 
     private PlaceState state = PlaceState.None;
 
     // ====== 선택 정보 ======
     private bool isMudSelect = false;
+    private bool isBuildingSelect = false;
     private CropData currentSelectedCrop = null;
 
     // ====== 참조 ======
     private GridManager gridManager;
     private GameObject previewInstance;
 
-    // ====== pending(확정 대기) ======
+    // ====== pending(확정 대기 - 건물용) ======
     private Vector3 pendingPosition;
     private int pendingX, pendingZ;
 
-    // ====== 드래그 최적화 ======
+    // ====== 드래그 최적화 (밭/작물용) ======
     private int lastX = -1;
     private int lastZ = -1;
 
-    private void Awake()
-    {
-        Instance = this;
-    }
+    private void Awake() => Instance = this;
 
     private void Start()
     {
+        // 씬에 존재하는 GridManager를 찾아 참조 연결
         if (gridManager == null) gridManager = FindAnyObjectByType<GridManager>();
+        // 시작 시 배치 UI는 꺼둠
         if (placementUIPanel != null) placementUIPanel.SetActive(false);
     }
 
     private void Update()
     {
-        // 앵커 확정 상태(Anchored)에서는 "땅 클릭으로 위치 변경"을 기본적으로 막음.
-        // (원하면 Aiming으로 되돌리는 '위치 다시 선택' 버튼을 제공)
-        if (Input.touchCount > 0) HandleMobileInput();
-        else HandleEditorInput();
-    }
-
-    /// <summary>
-    /// 에디터(PC) 마우스 입력 처리
-    /// </summary>
-    private void HandleEditorInput()
-    {
-        // 마우스 이동 시 프리뷰는 항상 갱신
-        ProcessRaycast(Input.mousePosition, false);
-
-        // 클릭은 Down 시점에서만 처리
-        if (Input.GetMouseButtonDown(0))
-        {
-            // UI 위 클릭이면 월드 입력 차단
-            if (EventSystem.current != null &&
-                EventSystem.current.IsPointerOverGameObject())
-                return;
-
-            ProcessRaycast(Input.mousePosition, true);
-        }
-    }
-
-    /// <summary>
-    /// 모바일 터치 입력 처리
-    /// </summary>
-    private void HandleMobileInput()
-    {
-        Touch touch = Input.GetTouch(0);
-
-        // UI 터치 시 월드 입력 무시
-        if (EventSystem.current != null &&
-            EventSystem.current.IsPointerOverGameObject(touch.fingerId))
-            return;
-
-        // 프리뷰 위치 갱신
-        ProcessRaycast(touch.position, false);
-
-        // 터치 종료 시 클릭으로 간주
-        if (touch.phase == TouchPhase.Ended)
-            ProcessRaycast(touch.position, true);
-    }
-
-    /// <summary>
-    /// Raycast를 통해 그리드 좌표 계산 및 배치 로직 처리
-    /// </summary>
-    private void ProcessRaycast(Vector2 screenPos, bool isClick)
-    {
-        Ray ray = Camera.main.ScreenPointToRay(screenPos);
-
-        // 바닥에 맞지 않으면 무시
-        if (!Physics.Raycast(ray, out RaycastHit hit, 999f, groundLayer))
-            return;
-
-        // 월드 좌표를 그리드 좌표로 변환
-        int x = Mathf.FloorToInt(hit.point.x / cellSize);
-        int z = Mathf.FloorToInt(hit.point.z / cellSize);
-
-        // 그리드 범위 밖이면 무시
-        if (x < 0 || z < 0 || x >= gridManager.width || z >= gridManager.height)
-            return;
-
-        Vector3 snapPos = GridToWorld(x, z);
-
-        // 프리뷰 표시 (조준 중 또는 기준 확정 상태)
-        if (state == PlaceState.Aiming || state == PlaceState.Anchored)
-        {
-            float y = isMudSelect ? 0f : 0.16f;
-            HandlePreview(snapPos, y);
-        }
-
-        // 클릭이 아니면 여기서 종료
-        if (!isClick) return;
-
-        // 수확 모드
+        // 아무것도 선택되지 않은 상태(수확 모드 등)에서는 클릭 시 수확만 처리
         if (state == PlaceState.None)
         {
-            TryHarvest(x, z);
+            HandleHarvestInput();
             return;
         }
 
-        // 첫 클릭 → 기준 위치 확정
-        if (state == PlaceState.Aiming && CanPlace(x, z))
+        // 앵커 확정 상태(V/X 버튼 활성)에서는 드래그 입력을 잠시 멈춤
+        if (placementUIPanel.activeSelf) return;
+
+        if (Input.touchCount > 0) HandleMobilePlacement();
+        else HandleEditorPlacement();
+    }
+
+    /// <summary>
+    /// 수확 모드 입력 처리 (드래그 수확 지원)
+    /// </summary>
+    private void HandleHarvestInput()
+    {
+        // PC
+        if (Input.touchCount == 0)
         {
-            SetPending(x, z);
-            ShowPlacementUI(pendingPosition);
-            state = PlaceState.Anchored;
+            // 프레스 중이면 계속 수확 시도
+            if (Input.GetMouseButton(0))
+            {
+                if (IsPointerOverUI()) return;
+                ProcessHarvest(Input.mousePosition);
+            }
+
+            // 손 뗐으면 기록 초기화
+            if (Input.GetMouseButtonUp(0))
+            {
+                lastX = -1;
+                lastZ = -1;
+            }
+        }
+        // Mobile
+        else
+        {
+            Touch touch = Input.GetTouch(0);
+            if (IsPointerOverUI(touch.fingerId)) return;
+
+            if (touch.phase == TouchPhase.Began || touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Stationary)
+            {
+                ProcessHarvest(touch.position);
+            }
+
+            if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+            {
+                lastX = -1;
+                lastZ = -1;
+            }
+        }
+    }
+    /// <summary>
+    /// 드래그 중 해당 칸을 수확 시도 (중복 방지)
+    /// </summary>
+    private void ProcessHarvest(Vector2 screenPos)
+    {
+        RaycastToGrid(screenPos, (x, z, hitPos) =>
+        {
+            // 같은 칸이면 스킵 (드래그 중 중복 수확 방지)
+            if (x == lastX && z == lastZ) return;
+
+            // 수확 시도
+            TryHarvest(x, z);
+
+            lastX = x;
+            lastZ = z;
+        });
+    }
+
+
+    /// <summary>
+    /// 에디터(PC) 마우스 배치 입력 처리
+    /// </summary>
+    private void HandleEditorPlacement()
+    {
+        // 마우스 이동 시 프리뷰 갱신
+        ProcessPlacement(Input.mousePosition);
+
+        // 마우스를 누르고 있는 동안(드래그 포함) 실시간으로 설치를 시도
+        if (Input.GetMouseButton(0))
+        {
+            if (IsPointerOverUI()) return;
+            ProcessPlacement(Input.mousePosition);
+        }
+
+        if (Input.GetMouseButtonUp(0))
+        {
+            // 마우스를 떼면 마지막 기록 초기화 (다시 클릭했을 때 바로 심기게)
+            lastX = -1;
+            lastZ = -1;
         }
     }
 
     /// <summary>
-    /// 상점에서 아이템을 선택했을 때 호출되는 메서드
+    /// 모바일 터치 배치 입력 처리
     /// </summary>
-    public void SelectItemFromShop(CropData data, bool isMud)
+    private void HandleMobilePlacement()
     {
-        // 선택 정보 저장
+        if (Input.touchCount == 0) return;
+        Touch touch = Input.GetTouch(0);
+        if (IsPointerOverUI(touch.fingerId)) return;
+
+        // 프리뷰 위치 및 설치 처리
+        ProcessPlacement(touch.position);
+
+        if (touch.phase == TouchPhase.Ended)
+        {
+            lastX = -1;
+            lastZ = -1;
+        }
+    }
+
+    /// <summary>
+    /// 레이캐스트를 통해 그리드 좌표 계산 및 배치 로직 처리
+    /// </summary>
+    private void ProcessPlacement(Vector2 screenPos)
+    {
+        RaycastToGrid(screenPos, (x, z, hitPos) => {
+            Vector3 snapPos = GridToWorld(x, z);
+            HandlePreview(snapPos, (isMudSelect || isBuildingSelect) ? 0f : 0.16f);
+
+            // [건물 설치 로직: V/X 방식]
+            if (isBuildingSelect)
+            {
+                // 마우스를 뗐을 때 해당 자리에 V/X UI를 띄움
+                if (Input.GetMouseButtonUp(0) || (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Ended))
+                {
+                    pendingPosition = snapPos;
+                    pendingX = x;
+                    pendingZ = z;
+
+                    if (previewInstance != null) previewInstance.transform.position = snapPos;
+                    ShowPlacementUI(snapPos);
+                }
+            }
+            // [밭/작물 설치 로직: 드래그 즉시 설치 방식]
+            else
+            {
+                // 마우스 버튼을 누르고 있는 동안에만 설치 진행
+                if (!Input.GetMouseButton(0) && Input.touchCount == 0) return;
+
+                // 드래그 중 이전 칸과 동일하면 건너뜀
+                if (x == lastX && z == lastZ) return;
+
+                // 이미 배치된 곳이면 취소(삭제)가 우선
+                if (TryCancelPlacedAt(x, z))
+                {
+                    lastX = x;
+                    lastZ = z;
+                    return;
+                }
+
+                // 비어있거나 심을 수 있으면 설치
+                if (CanPlace(x, z))
+                {
+                    PlaceAt(x, z);
+                    lastX = x;
+                    lastZ = z;
+                }
+            }
+        });
+    }
+
+    private bool TryCancelPlacedAt(int x, int z)
+    {
+        // 밭 배치 모드일 때: 이미 Mud면 다시 누르면 Empty로
+        if (isMudSelect && gridManager.GetTileType(x, z) == TileType.Mud)
+        {
+            RemovePlacedObject(x, z);
+            gridManager.PlaceObject(x, z, TileType.Empty);
+
+            // 환불하고 싶으면 여기서 AddGold(mudPrice)
+            InventoryManager.Instance.AddGoldGFromHarvest(mudPrice);
+
+            return true;
+        }
+
+        // 작물 배치 모드일 때: 이미 Crop이면 다시 누르면 Mud로
+        if (!isMudSelect && !isBuildingSelect && gridManager.GetTileType(x, z) == TileType.Crop)
+        {
+            RemovePlacedObject(x, z);
+            gridManager.PlaceObject(x, z, TileType.Mud);
+
+            InventoryManager.Instance.AddGoldGFromHarvest(currentSelectedCrop.purchasePrice);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 풀 반납
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="z"></param>
+    private void RemovePlacedObject(int x, int z)
+    {
+        var k = Key(x, z);
+        if (!placedObjects.TryGetValue(k, out var obj) || obj == null)
+            return;
+
+        placedObjects.Remove(k);
+
+        PoolManager.Instance.Release(obj);
+    }
+
+    /// <summary>
+    /// 상점에서 아이템(밭, 작물, 건물)을 선택했을 때 호출되는 메서드
+    /// </summary>
+    public void SelectItemFromShop(CropData data, bool isMud, bool isBuilding = false)
+    {
         isMudSelect = isMud;
-        currentSelectedCrop = isMud ? null : data;
+        isBuildingSelect = isBuilding;
+        currentSelectedCrop = (isMud || isBuilding) ? null : data;
 
-        // 프리뷰 교체
-        UpdatePreview(isMud ? mudPreviewPrefab : previewCropPrefab);
+        if (isMudSelect)
+        {
+            UpdatePreview(mudPreviewPrefab);
+        }
+        else if (isBuildingSelect)
+        {
+            UpdatePreview(buildingPreviewPrefab);
+        }
+        else
+        {
+            UpdatePreview(previewCropPrefab);
+            ApplySeedPreview(currentSelectedCrop);
+        }
 
-        // 배치 조준 상태로 전환
-        state = PlaceState.Aiming;
+        state = PlaceState.Placing;
+        if (placementUIPanel != null) placementUIPanel.SetActive(false);
 
-        // V/X 버튼은 아직 숨김
-        placementUIPanel.SetActive(false);
-
-        // 상점 닫기
         ShopManager.Instance?.CloseShop();
+        UIManager.Instance.OnPlaceUI(true, data, isMud, isBuilding);
+        Debug.Log($"[SelectItemFromShop] data={(data != null ? data.cropName : "NULL")} isMud={isMud} isBuilding={isBuilding}");
+
+    }
+
+    /// <summary>
+    /// 작물 수확 처리
+    /// </summary>
+    private void TryHarvest(int x, int z)
+    {
+        // 현재 칸이 작물 상태인지 확인
+        if (gridManager.GetTileType(x, z) != TileType.Crop) return;
+
+        Vector3 center = GridToWorld(x, z);
+        // 주변의 콜라이더를 체크하여 Crop 오브젝트 탐색
+        foreach (Collider col in Physics.OverlapSphere(center, cellSize * 0.4f))
+        {
+            if (col.TryGetComponent(out Crop crop) && crop.IsFullGrown)
+            {
+                // 골드 지급 및 경험치 지급
+                InventoryManager.Instance.AddGoldGFromHarvest(crop.data.sellingPrice);
+                if (ExpManager.Instance != null) ExpManager.Instance.AddExp(crop.data.expReward);
+
+                // 수확 연출 및 데이터 갱신
+                crop.Harvest();
+                gridManager.PlaceObject(x, z, TileType.Mud);
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -191,38 +344,23 @@ public class GridSystem : MonoBehaviour
     /// </summary>
     public void OnClickConfirmPlacement()
     {
-        if (state != PlaceState.Anchored) return;
-
         // 현재 위치에 설치
         PlaceAt(pendingX, pendingZ);
 
-        // 다음 칸으로 이동 가능하면 연속 배치
-        if (TryMoveNextCell())
-        {
-            ShowPlacementUI(pendingPosition);
-        }
-        else
-        {
-            ExitPlacement();
-        }
+        // 설치 후 계속 심을 수 있게 상태 유지 (에브리타운 방식)
+        // 건물의 경우에도 프리뷰를 유지하여 다음 위치를 잡을 수 있게 함
+        placementUIPanel.SetActive(false);
     }
 
     /// <summary>
     /// X 버튼 클릭 시 호출 (배치 취소)
     /// </summary>
-    public void OnClickCancelPlacement()
-    {
-        ExitPlacement();
-    }
+    public void OnClickCancelPlacement() => ExitPlacement();
 
     /// <summary>
-    /// 기준 위치를 다시 선택하고 싶을 때 호출
+    /// 배치 완료 버튼 클릭 시 호출 (배치 모드 종료)
     /// </summary>
-    public void OnClickReselectAnchor()
-    {
-        state = PlaceState.Aiming;
-        placementUIPanel.SetActive(false);
-    }
+    public void OnClickExitPlacement() => ExitPlacement();
 
     /// <summary>
     /// 그리드 좌표에 실제 오브젝트를 설치
@@ -231,40 +369,114 @@ public class GridSystem : MonoBehaviour
     {
         Vector3 pos = GridToWorld(x, z);
 
+        var k = Key(x, z);
         if (isMudSelect)
         {
             if (!InventoryManager.Instance.TrySpendGold(mudPrice)) return;
 
-            PoolManager.Instance.Get(mudPoolKey, pos, Quaternion.identity);
+            GameObject mudObj = PoolManager.Instance.Get(mudPoolKey, pos, Quaternion.identity);
+            placedObjects[k] = mudObj;
+
             gridManager.PlaceObject(x, z, TileType.Mud);
+        }
+        else if (isBuildingSelect)
+        {
+            GameObject bObj = PoolManager.Instance.Get(buildingPoolKey, pos, Quaternion.identity);
+            placedObjects[k] = bObj;
+
+            gridManager.PlaceObject(x, z, TileType.Crop);
         }
         else
         {
             if (!InventoryManager.Instance.TrySpendGold(currentSelectedCrop.purchasePrice)) return;
 
-            GameObject crop = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+            GameObject cropObj = PoolManager.Instance.Get(cropPoolKey, pos, Quaternion.identity);
+            placedObjects[k] = cropObj;
+
             gridManager.PlaceObject(x, z, TileType.Crop);
-            crop.GetComponent<Crop>().Initialize(currentSelectedCrop);
+            cropObj.GetComponent<Crop>().Initialize(currentSelectedCrop);
         }
     }
 
     /// <summary>
-    /// 작물 수확 처리
+    /// 배치 모드 종료 및 상태 초기화
     /// </summary>
-    private void TryHarvest(int x, int z)
+    private void ExitPlacement()
     {
-        if (gridManager.GetTileType(x, z) != TileType.Crop) return;
+        state = PlaceState.None;
+        isMudSelect = false;
+        isBuildingSelect = false;
+        currentSelectedCrop = null;
+        if (previewInstance != null) previewInstance.SetActive(false);
+        if (placementUIPanel != null) placementUIPanel.SetActive(false);
 
-        Vector3 center = GridToWorld(x, z);
-        foreach (Collider col in Physics.OverlapSphere(center, cellSize * 0.4f))
+        UIManager.Instance.OnPlaceUI(false, null, false, false);
+    }
+
+    /// <summary>
+    /// 배치 UI(V/X)를 월드 좌표 기준으로 표시
+    /// </summary>
+    private void ShowPlacementUI(Vector3 pos)
+    {
+        if (placementUIPanel == null) return;
+        placementUIPanel.SetActive(true);
+        // World Canvas 좌표 대입 및 카메라 방향 고정
+        placementUIPanel.transform.position = pos + Vector3.up * 1.5f;
+        placementUIPanel.transform.rotation = Camera.main.transform.rotation;
+    }
+
+    /// <summary>
+    /// 프리뷰 프리팹 교체
+    /// </summary>
+    private void UpdatePreview(GameObject prefab)
+    {
+        if (previewInstance != null) Destroy(previewInstance);
+        if (prefab == null) return;
+        previewInstance = Instantiate(prefab);
+        // 레이캐스트 방해 방지 (콜라이더 끄기)
+        if (previewInstance.TryGetComponent<Collider>(out var col)) col.enabled = false;
+
+        // 작물 프리뷰를 0단계로 적용
+        if (!isMudSelect && !isBuildingSelect && currentSelectedCrop != null)
         {
-            if (!col.TryGetComponent(out Crop crop)) continue;
-            if (!crop.IsFullGrown) return;
-
-            crop.Harvest();
-            gridManager.PlaceObject(x, z, TileType.Mud);
-            return;
+            ApplySeedPreview(currentSelectedCrop);
         }
+    }
+
+    private void ApplySeedPreview(CropData data)
+    {
+        if(data.growthStagePrefabs == null || data.growthStagePrefabs.Length == 0) return;
+        
+        GameObject seedPrefab = data.growthStagePrefabs[0];
+        if(seedPrefab == null) return;
+
+        Transform root = previewInstance.transform.Find("Seed");
+        if (root == null) return;
+
+        //기존 프리뷰 모델 제거
+        for (int i = root.childCount - 1; i >= 0; i--)
+        {
+            Destroy(root.GetChild(i).gameObject);
+        }
+        // 씨앗 단계 프리뷰 생성
+        GameObject previewModel = Instantiate(seedPrefab, root);
+
+        if(previewModel.TryGetComponent<Collider>(out var c))
+        {
+            c.enabled = false;
+        }
+    }
+      
+
+    /// <summary>
+    /// 프리뷰 위치 및 표시 처리
+    /// </summary>
+    private void HandlePreview(Vector3 pos, float y)
+    {
+        if (previewInstance == null) return;
+        pos.y = y;
+        previewInstance.SetActive(true);
+        previewInstance.transform.position = pos;
     }
 
     /// <summary>
@@ -290,72 +502,21 @@ public class GridSystem : MonoBehaviour
     }
 
     /// <summary>
-    /// 기준 위치(pending) 설정
+    /// 마우스/터치가 UI 위에 있는지 확인
     /// </summary>
-    private void SetPending(int x, int z)
-    {
-        pendingX = x;
-        pendingZ = z;
-        pendingPosition = GridToWorld(x, z);
-    }
+    private bool IsPointerOverUI(int fingerId = -1) => EventSystem.current != null && (fingerId == -1 ? EventSystem.current.IsPointerOverGameObject() : EventSystem.current.IsPointerOverGameObject(fingerId));
 
     /// <summary>
-    /// 다음 칸으로 이동 (연속 배치용)
+    /// 레이캐스트 공통 처리 유틸리티
     /// </summary>
-    private bool TryMoveNextCell()
+    private void RaycastToGrid(Vector2 screenPos, System.Action<int, int, Vector3> onSuccess)
     {
-        int nx = pendingX + stepX;
-        int nz = pendingZ + stepZ;
-
-        if (nx < 0 || nz < 0 ||
-            nx >= gridManager.width || nz >= gridManager.height)
-            return false;
-
-        if (!CanPlace(nx, nz)) return false;
-
-        SetPending(nx, nz);
-        return true;
-    }
-
-    /// <summary>
-    /// 배치 모드 종료 및 상태 초기화
-    /// </summary>
-    private void ExitPlacement()
-    {
-        state = PlaceState.None;
-        placementUIPanel.SetActive(false);
-        previewInstance.SetActive(false);
-    }
-
-    /// <summary>
-    /// 배치 UI(V/X)를 월드 좌표 기준으로 표시
-    /// </summary>
-    private void ShowPlacementUI(Vector3 pos)
-    {
-        placementUIPanel.SetActive(true);
-        placementUIPanel.transform.position = pos + Vector3.up * 1.5f;
-        placementUIPanel.transform.rotation = Camera.main.transform.rotation;
-    }
-
-    /// <summary>
-    /// 프리뷰 프리팹 교체
-    /// </summary>
-    private void UpdatePreview(GameObject prefab)
-    {
-        if (previewInstance != null)
-            Destroy(previewInstance);
-
-        previewInstance = Instantiate(prefab);
-        previewInstance.GetComponent<Collider>().enabled = false;
-    }
-
-    /// <summary>
-    /// 프리뷰 위치 및 표시 처리
-    /// </summary>
-    private void HandlePreview(Vector3 pos, float y)
-    {
-        pos.y = y;
-        previewInstance.SetActive(true);
-        previewInstance.transform.position = pos;
+        Ray ray = Camera.main.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, groundLayer))
+        {
+            int x = Mathf.FloorToInt(hit.point.x / cellSize);
+            int z = Mathf.FloorToInt(hit.point.z / cellSize);
+            onSuccess?.Invoke(x, z, hit.point);
+        }
     }
 }

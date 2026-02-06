@@ -4,6 +4,7 @@ using UnityEngine;
 public class CropData : ScriptableObject
 {
     public string cropName;
+    public Sprite icon; // 현재 선택 옆에 Image
     public float timeBetweenStages; //단계별 성장 시간
     // 성장 단계별 프리팹 배열 (0: 씨앗, 1: 새싹, 2: 성장기, 3: 수확기)
     public GameObject[] growthStagePrefabs;

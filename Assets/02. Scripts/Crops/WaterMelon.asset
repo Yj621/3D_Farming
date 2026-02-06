@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca27d5c1c8cbc5843aab706cb11111f5, type: 3}
+  m_Name: WaterMelon
+  m_EditorClassIdentifier: 
+  cropName: Beet
+  icon: {fileID: 994218995, guid: f7ef2d740c6752c40a9f450618184d47, type: 3}
+  timeBetweenStages: 24
+  growthStagePrefabs:
+  - {fileID: 8263056049160947295, guid: 4a8b1bace4f683a428b76f87b53dbf46, type: 3}
+  - {fileID: 8379142031297309482, guid: 2054335dd23462f46a35daf52d86cb1c, type: 3}
+  - {fileID: 2346832155094585846, guid: bd2beb51f7c30b24f8d5b132f891c2a0, type: 3}
+  - {fileID: 3328385313460892542, guid: 7fe751b2aa999284784a3e15fe9ed1e5, type: 3}
+  - {fileID: 2215158599137015723, guid: 698134f217d0b73408944ea10fadc24c, type: 3}
+  unlockLevel: 5
+  expReward: 30
+  sellingPrice: 200
+  purchasePrice: 100

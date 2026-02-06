@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Tomato
   m_EditorClassIdentifier: 
   cropName: Tomato
+  icon: {fileID: 1360261830, guid: a7c7402bfd2d4054f82a197a9c11533d, type: 3}
   timeBetweenStages: 5
   growthStagePrefabs:
   - {fileID: 2630425031254273193, guid: 2e4dc950a7d35e145a6f0f7dfacf00cb, type: 3}

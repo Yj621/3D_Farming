@@ -18,21 +18,26 @@ public class ExpManager : MonoBehaviour
 
     public void AddExp(int amount)
     {
-        currentEXP = amount;
+        currentEXP += amount;
         if (currentEXP >= expToNextLevel)
         {
             LevelUp();
         }
         // TODO : UI 업데이트 호출
     }
+    public void DebugLevelUp()
+    {
+        LevelUp();
+    }
 
-    private void LevelUp()
+    public void LevelUp()
     {
         currentEXP -= expToNextLevel;
         currentLevel++;
         // 필요 경험치 증가
         expToNextLevel = Mathf.RoundToInt(expToNextLevel * 1.5f);
 
-        // TODO : 레벨업 시 새로운 씨앗 해금 체크 로직 실행
+        //레벨업 이벤트 호출
+        OnLevelUp?.Invoke(currentLevel);
     }
 }
