@@ -4,7 +4,9 @@ using UnityEngine.UI;
 public class CropUI : MonoBehaviour
 {
     [Header("작물 성장률 관련")]
-    [SerializeField] private SpriteRenderer sr;
+    public GameObject progressbar;
+
+    SpriteRenderer sr;
     private static readonly int FillAmountId = Shader.PropertyToID("_FillAmount");
     private MaterialPropertyBlock mpb;
 
@@ -13,6 +15,7 @@ public class CropUI : MonoBehaviour
 
     private void Awake()
     {
+        sr = progressbar.GetComponent<SpriteRenderer>();
         mpb = new MaterialPropertyBlock();
         if (sr == null) sr = GetComponentInChildren<SpriteRenderer>(true);
         if (floatingAnchor == null) floatingAnchor = transform; // 없으면 자기 자신 기준
@@ -26,9 +29,13 @@ public class CropUI : MonoBehaviour
         amount = Mathf.Clamp01(amount);
         mpb.SetFloat(FillAmountId, amount);
         sr.SetPropertyBlock(mpb);
+        progressbar.SetActive(false);
     }
 
-
+    /// <summary>
+    /// 골드 획득 플로팅 텍스트 표시
+    /// </summary>
+    /// <param name="amount"></param>
     public void ShowGold(int amount)
     {
         Debug.Log($"[ShowGold] amount={amount}, WUIMgr={(WorldUIManager.Instance != null)}");
@@ -38,6 +45,10 @@ public class CropUI : MonoBehaviour
         WorldUIManager.Instance.ShowFloatingText(pos, $"{amount}골드");
     }
 
+    /// <summary>
+    /// 범용 플로팅 텍스트 표시
+    /// </summary>
+    /// <param name="text"></param>
     public void ShowText(string text)
     {
         if (WorldUIManager.Instance == null) return;

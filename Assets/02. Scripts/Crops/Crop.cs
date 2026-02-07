@@ -6,7 +6,7 @@ public class Crop : MonoBehaviour, IPoolable
 {
     public CropData data;
 
-    [SerializeField] private CropUI cropUI;
+    public CropUI cropUI;
     public CropUI UI => cropUI;
 
 
@@ -46,10 +46,6 @@ public class Crop : MonoBehaviour, IPoolable
             {
                 PlayFullGrownParticle();
                 hasPlayedFullGrownEffect = true;
-
-                // 다 자랐으면 UI 제거
-                if (cropUI != null)
-                    cropUI.gameObject.SetActive(false);
             }
             return;
 
@@ -66,12 +62,6 @@ public class Crop : MonoBehaviour, IPoolable
         if (cropUI != null)
         {
             cropUI.SetFillAmount(totalProgress);
-
-            //  다 자랐을 때 UI를 파괴하지 말고 숨김 처리
-            if (totalProgress >= 1f)
-            {
-                cropUI.gameObject.SetActive(false);
-            }
         }
 
 
@@ -79,12 +69,6 @@ public class Crop : MonoBehaviour, IPoolable
         {
             Grow();
             growthTimer = 0f;
-
-            if (IsFullGrown && cropUI != null)
-            {
-                cropUI.gameObject.SetActive(false);
-                cropUI = null;
-            }
         }
     }
 
@@ -259,7 +243,6 @@ public class Crop : MonoBehaviour, IPoolable
         if (cropUI != null)
         {
             cropUI.SetFillAmount(0f);
-            cropUI.gameObject.SetActive(false);
         }
 
         // 모델 비활성화

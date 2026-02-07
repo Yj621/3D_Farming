@@ -11977,6 +11977,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 11400000, guid: d795bfdc73578eb438fbcac3d9ad1327, type: 2}
     - target: {fileID: 3150439585462132693, guid: 812f2239d58e72048934361f5178d531, type: 3}
+      propertyPath: previewMaterial
+      value: 
+      objectReference: {fileID: 2100000, guid: 483ce4aaac45aa3448c3c552fc95da68, type: 2}
+    - target: {fileID: 3150439585462132693, guid: 812f2239d58e72048934361f5178d531, type: 3}
       propertyPath: placementUIPanel
       value: 
       objectReference: {fileID: 140438635}

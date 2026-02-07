@@ -21,8 +21,9 @@ public class GridSystem : MonoBehaviour
 
     [Header("프리뷰 프리팹")]
     [SerializeField] private GameObject mudPreviewPrefab;
-    [SerializeField] private GameObject previewCropPrefab;
     [SerializeField] private GameObject buildingPreviewPrefab;
+    [SerializeField] private Material previewMaterial;
+
 
     [Header("가격")]
     [SerializeField] private int mudPrice = 50;
@@ -191,7 +192,8 @@ public class GridSystem : MonoBehaviour
     /// </summary>
     private void ProcessPlacement(Vector2 screenPos)
     {
-        RaycastToGrid(screenPos, (x, z, hitPos) => {
+        RaycastToGrid(screenPos, (x, z, hitPos) =>
+        {
             Vector3 snapPos = GridToWorld(x, z);
             HandlePreview(snapPos, (isMudSelect || isBuildingSelect) ? 0f : 0.16f);
 
@@ -300,8 +302,7 @@ public class GridSystem : MonoBehaviour
         }
         else
         {
-            UpdatePreview(previewCropPrefab);
-            ApplySeedPreview(currentSelectedCrop);
+            UpdateCropPreview(currentSelectedCrop);
         }
 
         state = PlaceState.Placing;
@@ -312,6 +313,51 @@ public class GridSystem : MonoBehaviour
         Debug.Log($"[SelectItemFromShop] data={(data != null ? data.cropName : "NULL")} isMud={isMud} isBuilding={isBuilding}");
 
     }
+
+    /// <summary>
+    /// 작물 전용, 데이터 기반 프리뷰 생성
+    /// </summary>
+    /// <param name="data"></param>
+    private void UpdateCropPreview(CropData data)
+    {
+        if (previewInstance != null)
+            Destroy(previewInstance);
+
+        if (data.growthStagePrefabs == null || data.growthStagePrefabs.Length == 0)
+            return;
+
+        GameObject seedPrefab = data.growthStagePrefabs[0];
+        if (seedPrefab == null) return;
+
+        previewInstance = Instantiate(seedPrefab);
+
+        // 프리뷰니까 충돌 제거
+        foreach (var c in previewInstance.GetComponentsInChildren<Collider>(true))
+            c.enabled = false;
+        
+        // 프리뷰 머티리얼 적용
+        ApplyPreviewMaterial(previewInstance);
+    }
+private void ApplyPreviewMaterial(GameObject previewObj)
+{
+    if (previewMaterial == null) return;
+
+    var renderers = previewObj.GetComponentsInChildren<Renderer>(true);
+
+    foreach (var r in renderers)
+    {
+        // 머티리얼 인스턴스 생성 (원본 보호)
+        Material[] mats = new Material[r.sharedMaterials.Length];
+
+        for (int i = 0; i < mats.Length; i++)
+        {
+            mats[i] = new Material(previewMaterial);
+        }
+
+        r.materials = mats;
+    }
+}
+
 
     /// <summary>
     /// 작물 수확 처리
@@ -325,10 +371,12 @@ public class GridSystem : MonoBehaviour
         // 주변의 콜라이더를 체크하여 Crop 오브젝트 탐색
         foreach (Collider col in Physics.OverlapSphere(center, cellSize * 0.4f))
         {
-            if (col.TryGetComponent(out Crop crop) && crop.IsFullGrown)
+                if (col.TryGetComponent(out Crop crop) && crop.IsFullGrown)
             {
+                int amountGold = crop.data.sellingPrice;
                 // 골드 지급 및 경험치 지급
-                InventoryManager.Instance.AddGoldGFromHarvest(crop.data.sellingPrice);
+                InventoryManager.Instance.AddGoldGFromHarvest(amountGold);
+                crop.cropUI.ShowGold(amountGold);
                 if (ExpManager.Instance != null) ExpManager.Instance.AddExp(crop.data.expReward);
 
                 // 수확 연출 및 데이터 갱신
@@ -445,10 +493,10 @@ public class GridSystem : MonoBehaviour
 
     private void ApplySeedPreview(CropData data)
     {
-        if(data.growthStagePrefabs == null || data.growthStagePrefabs.Length == 0) return;
-        
+        if (data.growthStagePrefabs == null || data.growthStagePrefabs.Length == 0) return;
+
         GameObject seedPrefab = data.growthStagePrefabs[0];
-        if(seedPrefab == null) return;
+        if (seedPrefab == null) return;
 
         Transform root = previewInstance.transform.Find("Seed");
         if (root == null) return;
@@ -461,12 +509,12 @@ public class GridSystem : MonoBehaviour
         // 씨앗 단계 프리뷰 생성
         GameObject previewModel = Instantiate(seedPrefab, root);
 
-        if(previewModel.TryGetComponent<Collider>(out var c))
+        if (previewModel.TryGetComponent<Collider>(out var c))
         {
             c.enabled = false;
         }
     }
-      
+
 
     /// <summary>
     /// 프리뷰 위치 및 표시 처리
